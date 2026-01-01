@@ -1,21 +1,74 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+use ab_glyph::{FontRef, PxScale};
+use image::{Rgba, RgbaImage};
+use imageproc::drawing::{draw_filled_circle_mut, draw_text_mut};
 use notify::{Config, RecommendedWatcher, RecursiveMode, Watcher};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs::{self, File};
-use std::io::{BufRead, BufReader, Seek, SeekFrom};
+use std::io::{BufRead, BufReader, Cursor, Seek, SeekFrom};
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use tauri::{
     image::Image,
-    menu::{MenuItemBuilder, PredefinedMenuItem, SubmenuBuilder, Menu},
+    menu::{Menu, MenuItemBuilder, PredefinedMenuItem, SubmenuBuilder},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
     Emitter, Manager, Runtime, WebviewUrl, WebviewWindowBuilder,
 };
 
 const ICON_NORMAL: &[u8] = include_bytes!("../icons/icon.png");
-const ICON_WAITING: &[u8] = include_bytes!("../icons/icon-waiting.png");
+const FONT_DATA: &[u8] = include_bytes!("../fonts/Roboto-Bold.ttf");
+
+// Generate icon with badge showing count
+fn generate_badge_icon(count: usize) -> Vec<u8> {
+    // Load base icon
+    let img = image::load_from_memory(ICON_NORMAL).expect("Failed to load icon");
+    let mut img: RgbaImage = img.to_rgba8();
+    let (width, _height) = img.dimensions();
+
+    // Badge settings
+    let badge_radius = (width as f32 * 0.28) as i32;
+    let badge_center_x = width as i32 - badge_radius - 1;
+    let badge_center_y = badge_radius + 1;
+    let badge_color = Rgba([230u8, 69u8, 96u8, 255u8]); // Red/pink color
+
+    // Draw badge circle
+    draw_filled_circle_mut(
+        &mut img,
+        (badge_center_x, badge_center_y),
+        badge_radius,
+        badge_color,
+    );
+
+    // Draw count text
+    let font = FontRef::try_from_slice(FONT_DATA).expect("Failed to load font");
+    let count_str = if count > 9 { "9+".to_string() } else { count.to_string() };
+    let scale = PxScale::from(badge_radius as f32 * 1.5);
+    let text_color = Rgba([255u8, 255u8, 255u8, 255u8]); // White
+
+    // Calculate text position (center in badge)
+    let text_offset_x = if count > 9 { badge_radius as f32 * 0.7 } else { badge_radius as f32 * 0.45 };
+    let text_x = badge_center_x as f32 - text_offset_x;
+    let text_y = badge_center_y as f32 - badge_radius as f32 * 0.55;
+
+    draw_text_mut(
+        &mut img,
+        text_color,
+        text_x as i32,
+        text_y as i32,
+        scale,
+        &font,
+        &count_str,
+    );
+
+    // Convert to PNG bytes
+    let mut bytes: Vec<u8> = Vec::new();
+    let mut cursor = Cursor::new(&mut bytes);
+    img.write_to(&mut cursor, image::ImageFormat::Png)
+        .expect("Failed to write image");
+    bytes
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct EventInfo {
@@ -77,6 +130,15 @@ impl AppState {
         self.sessions.values().any(|s| {
             s.status == SessionStatus::WaitingPermission || s.status == SessionStatus::WaitingInput
         })
+    }
+
+    fn waiting_session_count(&self) -> usize {
+        self.sessions
+            .values()
+            .filter(|s| {
+                s.status == SessionStatus::WaitingPermission || s.status == SessionStatus::WaitingInput
+            })
+            .count()
     }
 
     fn to_dashboard_data(&self) -> DashboardData {
@@ -273,7 +335,6 @@ fn build_menu<R: Runtime>(app: &tauri::AppHandle<R>, state: &AppState) -> tauri:
 
     // Open Dashboard
     let open_dashboard = MenuItemBuilder::with_id("open_dashboard", "Open Dashboard")
-        .accelerator("CmdOrCtrl+D")
         .build(app)?;
 
     let sep_dashboard = PredefinedMenuItem::separator(app)?;
@@ -364,24 +425,28 @@ fn update_tray<R: Runtime>(app: &tauri::AppHandle<R>, state: &AppState) {
             let _ = tray.set_menu(Some(new_menu));
         }
 
+        // Count waiting sessions
+        let waiting_count = state.waiting_session_count();
+
         // Update icon based on state
-        let icon_bytes = if state.has_waiting_sessions() {
-            ICON_WAITING
+        let icon_bytes: Vec<u8> = if waiting_count > 0 {
+            // Generate badge icon with count
+            generate_badge_icon(waiting_count)
         } else {
-            ICON_NORMAL
+            ICON_NORMAL.to_vec()
         };
 
-        if let Ok(icon) = Image::from_bytes(icon_bytes) {
+        if let Ok(icon) = Image::from_bytes(&icon_bytes) {
             let _ = tray.set_icon(Some(icon));
         }
 
         // Update tooltip
-        let tooltip = if state.has_waiting_sessions() {
-            "Claude Monitor - Action Required!"
+        let tooltip = if waiting_count > 0 {
+            format!("Claude Monitor - {} waiting", waiting_count)
         } else if state.sessions.is_empty() {
-            "Claude Monitor - No active sessions"
+            "Claude Monitor - No active sessions".to_string()
         } else {
-            "Claude Monitor"
+            "Claude Monitor".to_string()
         };
         let _ = tray.set_tooltip(Some(tooltip));
     }
@@ -400,17 +465,32 @@ fn open_dashboard<R: Runtime>(app: &tauri::AppHandle<R>) {
         return;
     }
 
-    // Create new window
-    let _ = WebviewWindowBuilder::new(
-        app,
-        "dashboard",
-        WebviewUrl::App("index.html".into()),
-    )
-    .title("Claude Monitor - Dashboard")
-    .inner_size(900.0, 700.0)
-    .min_inner_size(600.0, 400.0)
-    .center()
-    .build();
+    // Create new window with icon
+    if let Ok(icon) = Image::from_bytes(ICON_NORMAL) {
+        if let Ok(builder) = WebviewWindowBuilder::new(
+            app,
+            "dashboard",
+            WebviewUrl::App("index.html".into()),
+        )
+        .title("Claude Monitor - Dashboard")
+        .inner_size(900.0, 700.0)
+        .min_inner_size(600.0, 400.0)
+        .center()
+        .icon(icon) {
+            let _ = builder.build();
+        }
+    } else {
+        let _ = WebviewWindowBuilder::new(
+            app,
+            "dashboard",
+            WebviewUrl::App("index.html".into()),
+        )
+        .title("Claude Monitor - Dashboard")
+        .inner_size(900.0, 700.0)
+        .min_inner_size(600.0, 400.0)
+        .center()
+        .build();
+    }
 }
 
 // Tauri command to get dashboard data
@@ -481,8 +561,10 @@ fn main() {
             // Determine initial icon
             let initial_icon = {
                 let state_guard = state_for_tray.lock().unwrap();
-                if state_guard.has_waiting_sessions() {
-                    Image::from_bytes(ICON_WAITING)?
+                let waiting_count = state_guard.waiting_session_count();
+                if waiting_count > 0 {
+                    let badge_bytes = generate_badge_icon(waiting_count);
+                    Image::from_bytes(&badge_bytes)?
                 } else {
                     Image::from_bytes(ICON_NORMAL)?
                 }
