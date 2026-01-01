@@ -1,0 +1,103 @@
+#!/bin/bash
+# claude-monitor-watch - リアルタイムでイベントを監視
+#
+# Usage: claude-monitor-watch [options]
+#   -f, --follow     リアルタイム監視（デフォルト）
+#   -n, --lines N    最新N行を表示
+#   -j, --json       JSONをそのまま表示
+#   -s, --summary    サマリー表示
+
+set -euo pipefail
+
+LOG_DIR="${HOME}/.claude-monitor/logs"
+EVENTS_FILE="${LOG_DIR}/events.jsonl"
+CONSOLE_FILE="${LOG_DIR}/console.log"
+
+MODE="follow"
+LINES=20
+JSON_MODE=false
+
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        -f|--follow)
+            MODE="follow"
+            shift
+            ;;
+        -n|--lines)
+            MODE="lines"
+            LINES="$2"
+            shift 2
+            ;;
+        -j|--json)
+            JSON_MODE=true
+            shift
+            ;;
+        -s|--summary)
+            MODE="summary"
+            shift
+            ;;
+        *)
+            echo "Unknown option: $1"
+            exit 1
+            ;;
+    esac
+done
+
+# ログディレクトリが存在しない場合
+if [ ! -d "$LOG_DIR" ]; then
+    echo "ログディレクトリが存在しません: $LOG_DIR"
+    echo "claude-monitor-hook を設定して Claude Code を実行してください"
+    exit 1
+fi
+
+case $MODE in
+    follow)
+        echo "📡 Claude Monitor - リアルタイム監視中..."
+        echo "   ログファイル: $CONSOLE_FILE"
+        echo "   Ctrl+C で終了"
+        echo "----------------------------------------"
+        
+        # ファイルが存在しない場合は作成
+        touch "$CONSOLE_FILE"
+        
+        # リアルタイム監視
+        tail -f "$CONSOLE_FILE"
+        ;;
+        
+    lines)
+        if $JSON_MODE; then
+            tail -n "$LINES" "$EVENTS_FILE" 2>/dev/null | jq '.'
+        else
+            tail -n "$LINES" "$CONSOLE_FILE" 2>/dev/null
+        fi
+        ;;
+        
+    summary)
+        echo "📊 Claude Monitor サマリー"
+        echo "========================================"
+        
+        if [ ! -f "$EVENTS_FILE" ]; then
+            echo "イベントログがありません"
+            exit 0
+        fi
+        
+        # 総イベント数
+        TOTAL=$(wc -l < "$EVENTS_FILE" | tr -d ' ')
+        echo "総イベント数: $TOTAL"
+        echo ""
+        
+        # イベントタイプ別集計
+        echo "イベントタイプ別:"
+        jq -r '.event' "$EVENTS_FILE" 2>/dev/null | sort | uniq -c | sort -rn
+        echo ""
+        
+        # プロジェクト別集計
+        echo "プロジェクト別:"
+        jq -r '.project_name' "$EVENTS_FILE" 2>/dev/null | sort | uniq -c | sort -rn
+        echo ""
+        
+        # 最新5件
+        echo "最新5件:"
+        tail -n 5 "$CONSOLE_FILE" 2>/dev/null
+        ;;
+esac

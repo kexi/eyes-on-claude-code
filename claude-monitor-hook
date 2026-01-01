@@ -1,0 +1,94 @@
+#!/bin/bash
+# claude-monitor-hook - グローバルイベント監視スクリプト
+# 
+# Usage: claude-monitor-hook <event_type> [matcher]
+# 
+# このスクリプトは ~/.claude/settings.json から呼び出され、
+# 全てのClaude Codeセッションからのイベントをログに記録します。
+
+set -euo pipefail
+
+# ログディレクトリ
+LOG_DIR="${HOME}/.claude-monitor/logs"
+LOG_FILE="${LOG_DIR}/events.jsonl"
+LATEST_FILE="${LOG_DIR}/latest.json"
+
+# ディレクトリが存在しない場合は作成
+mkdir -p "$LOG_DIR"
+
+# 引数
+EVENT_TYPE="${1:-unknown}"
+MATCHER="${2:-}"
+
+# stdinからJSONを読み取り（タイムアウト付き）
+INPUT=$(timeout 5 cat 2>/dev/null || echo '{}')
+
+# 入力が空の場合のフォールバック
+if [ -z "$INPUT" ] || [ "$INPUT" = "" ]; then
+    INPUT='{}'
+fi
+
+# セッションIDとメッセージを抽出
+SESSION_ID=$(echo "$INPUT" | jq -r '.session_id // "unknown"' 2>/dev/null || echo "unknown")
+MESSAGE=$(echo "$INPUT" | jq -r '.message // empty' 2>/dev/null || echo "")
+NOTIFICATION_TYPE=$(echo "$INPUT" | jq -r '.notification_type // empty' 2>/dev/null || echo "")
+
+# プロジェクト名を抽出（CLAUDE_PROJECT_DIRから最後のディレクトリ名）
+PROJECT_DIR="${CLAUDE_PROJECT_DIR:-unknown}"
+PROJECT_NAME=$(basename "$PROJECT_DIR" 2>/dev/null || echo "unknown")
+
+# タイムスタンプ
+TIMESTAMP=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+TIMESTAMP_LOCAL=$(date +%H:%M:%S)
+
+# ペイロード作成
+PAYLOAD=$(jq -n \
+  --arg event "$EVENT_TYPE" \
+  --arg matcher "$MATCHER" \
+  --arg project_dir "$PROJECT_DIR" \
+  --arg project_name "$PROJECT_NAME" \
+  --arg session_id "$SESSION_ID" \
+  --arg message "$MESSAGE" \
+  --arg notification_type "$NOTIFICATION_TYPE" \
+  --arg timestamp "$TIMESTAMP" \
+  --argjson input "$INPUT" \
+  '{
+    timestamp: $timestamp,
+    event: $event,
+    matcher: $matcher,
+    project_name: $project_name,
+    project_dir: $project_dir,
+    session_id: $session_id,
+    message: $message,
+    notification_type: $notification_type,
+    raw_input: $input
+  }' 2>/dev/null || echo '{"error": "failed to create payload"}')
+
+# JSONLファイルに追記
+echo "$PAYLOAD" >> "$LOG_FILE"
+
+# 最新イベントを別ファイルに保存（デバッグ用）
+echo "$PAYLOAD" > "$LATEST_FILE"
+
+# コンソールにも出力（デバッグ用）
+# イベントタイプに応じた絵文字
+case "$EVENT_TYPE" in
+    notification)
+        case "$NOTIFICATION_TYPE" in
+            permission_prompt) EMOJI="🔐" ;;
+            idle_prompt) EMOJI="⏳" ;;
+            *) EMOJI="🔔" ;;
+        esac
+        ;;
+    stop) EMOJI="✅" ;;
+    session_start) EMOJI="🚀" ;;
+    session_end) EMOJI="🏁" ;;
+    pre_tool_use) EMOJI="🔧" ;;
+    post_tool_use) EMOJI="📝" ;;
+    *) EMOJI="📌" ;;
+esac
+
+# ログメッセージ出力（stderrに出力してClaudeのトランスクリプトを汚さない）
+echo "[$TIMESTAMP_LOCAL] $EMOJI $PROJECT_NAME: $EVENT_TYPE${MATCHER:+ ($MATCHER)}${MESSAGE:+ - $MESSAGE}" >> "${LOG_DIR}/console.log"
+
+exit 0
