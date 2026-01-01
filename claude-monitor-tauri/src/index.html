@@ -306,6 +306,124 @@
             display: flex;
             align-items: center;
         }
+
+        /* Mini View Mode */
+        body.mini-view {
+            cursor: move;
+        }
+
+        body.mini-view .container {
+            padding: 12px;
+        }
+
+        body.mini-view header {
+            padding: 8px 0;
+            margin-bottom: 12px;
+        }
+
+        body.mini-view .logo h1 {
+            font-size: 1rem;
+        }
+
+        body.mini-view .status-badge {
+            padding: 4px 10px;
+            font-size: 0.75rem;
+        }
+
+        body.mini-view .stats-grid {
+            display: none;
+        }
+
+        body.mini-view .section {
+            margin-bottom: 12px;
+        }
+
+        body.mini-view .section-header {
+            margin-bottom: 8px;
+        }
+
+        body.mini-view .section-title {
+            font-size: 0.875rem;
+        }
+
+        body.mini-view .session-card {
+            padding: 10px 12px;
+            gap: 10px;
+        }
+
+        body.mini-view .session-icon {
+            font-size: 1rem;
+            width: 28px;
+        }
+
+        body.mini-view .session-name {
+            font-size: 0.875rem;
+        }
+
+        body.mini-view .session-path {
+            font-size: 0.625rem;
+        }
+
+        body.mini-view .session-waiting-for {
+            font-size: 0.625rem;
+            padding: 2px 6px;
+            margin-top: 2px;
+        }
+
+        body.mini-view .session-status-text {
+            font-size: 0.75rem;
+        }
+
+        body.mini-view .session-time {
+            font-size: 0.625rem;
+        }
+
+        body.mini-view .remove-btn {
+            width: 22px;
+            height: 22px;
+            font-size: 0.75rem;
+            margin-left: 8px;
+        }
+
+        body.mini-view .refresh-btn {
+            padding: 4px 10px;
+            font-size: 0.75rem;
+        }
+
+        body.mini-view .events-list {
+            display: none;
+        }
+
+        body.mini-view .section:last-child {
+            display: none;
+        }
+
+        body.mini-view .empty-state {
+            padding: 20px;
+        }
+
+        body.mini-view .empty-state-icon {
+            font-size: 2rem;
+            margin-bottom: 8px;
+        }
+
+        body.mini-view .empty-state p {
+            font-size: 0.75rem;
+        }
+
+        /* Mini view cursor for dragging */
+        body.mini-view .container {
+            cursor: grab;
+        }
+
+        body.mini-view .container:active {
+            cursor: grabbing;
+        }
+
+        body.mini-view button,
+        body.mini-view .remove-btn {
+            cursor: pointer;
+        }
     </style>
 </head>
 <body>
@@ -364,6 +482,7 @@
     <script>
         const { invoke } = window.__TAURI__.core;
         const { listen } = window.__TAURI__.event;
+        const { getCurrentWindow } = window.__TAURI__.window;
 
         function getStatusEmoji(status) {
             switch (status) {
@@ -538,8 +657,63 @@
             updateStats(data.sessions, data.events);
         });
 
+        // Listen for settings updates from backend
+        listen('settings-updated', (event) => {
+            const settings = event.payload;
+            applyMiniView(settings.mini_view);
+        });
+
+        function applyMiniView(enabled) {
+            if (enabled) {
+                document.body.classList.add('mini-view');
+            } else {
+                document.body.classList.remove('mini-view');
+            }
+        }
+
+        async function loadSettings() {
+            try {
+                const settings = await invoke('get_settings');
+                applyMiniView(settings.mini_view);
+            } catch (error) {
+                console.error('Failed to load settings:', error);
+            }
+        }
+
+        // Setup drag functionality for mini view mode
+        function setupDragForMiniView() {
+            const container = document.querySelector('.container');
+            if (!container) return;
+
+            container.addEventListener('mousedown', async (e) => {
+                // Only enable dragging in mini view mode
+                if (!document.body.classList.contains('mini-view')) return;
+
+                // Don't drag when clicking on buttons or interactive elements
+                const target = e.target;
+                if (target.tagName === 'BUTTON' ||
+                    target.classList.contains('remove-btn') ||
+                    target.classList.contains('refresh-btn') ||
+                    target.closest('button') ||
+                    target.closest('.remove-btn')) {
+                    return;
+                }
+
+                // Only left mouse button
+                if (e.buttons === 1) {
+                    try {
+                        await getCurrentWindow().startDragging();
+                    } catch (error) {
+                        console.error('Failed to start dragging:', error);
+                    }
+                }
+            });
+        }
+
         // Initial load
         document.addEventListener('DOMContentLoaded', () => {
+            setupDragForMiniView();
+            loadSettings();
             refreshData();
             // Auto-refresh every 5 seconds as backup
             setInterval(refreshData, 5000);

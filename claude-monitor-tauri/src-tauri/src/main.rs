@@ -69,9 +69,15 @@ struct DashboardData {
 struct Settings {
     #[serde(default = "default_always_on_top")]
     always_on_top: bool,
+    #[serde(default = "default_mini_view")]
+    mini_view: bool,
 }
 
 fn default_always_on_top() -> bool {
+    true
+}
+
+fn default_mini_view() -> bool {
     true
 }
 
@@ -79,9 +85,15 @@ impl Default for Settings {
     fn default() -> Self {
         Self {
             always_on_top: true,
+            mini_view: true,
         }
     }
 }
+
+const MINI_VIEW_WIDTH: f64 = 228.0;
+const MINI_VIEW_HEIGHT: f64 = 416.0;
+const NORMAL_VIEW_WIDTH: f64 = 900.0;
+const NORMAL_VIEW_HEIGHT: f64 = 700.0;
 
 struct AppState {
     sessions: HashMap<String, SessionInfo>,
@@ -292,7 +304,7 @@ fn read_new_events(state: &mut AppState) -> Vec<EventInfo> {
     new_events
 }
 
-fn build_menu<R: Runtime>(app: &tauri::AppHandle<R>, state: &AppState) -> tauri::Result<(Menu<R>, CheckMenuItem<R>)> {
+fn build_menu<R: Runtime>(app: &tauri::AppHandle<R>, state: &AppState) -> tauri::Result<(Menu<R>, CheckMenuItem<R>, CheckMenuItem<R>)> {
     let waiting_count = state
         .sessions
         .values()
@@ -320,6 +332,10 @@ fn build_menu<R: Runtime>(app: &tauri::AppHandle<R>, state: &AppState) -> tauri:
 
     let always_on_top = CheckMenuItemBuilder::with_id("always_on_top", "Always on Top")
         .checked(state.settings.always_on_top)
+        .build(app)?;
+
+    let mini_view = CheckMenuItemBuilder::with_id("mini_view", "Mini View")
+        .checked(state.settings.mini_view)
         .build(app)?;
 
     let sep_dashboard = PredefinedMenuItem::separator(app)?;
@@ -376,7 +392,7 @@ fn build_menu<R: Runtime>(app: &tauri::AppHandle<R>, state: &AppState) -> tauri:
         .accelerator("CmdOrCtrl+Q")
         .build(app)?;
 
-    let menu = Menu::with_items(app, &[&header, &sep1, &open_dashboard, &always_on_top, &sep_dashboard])?;
+    let menu = Menu::with_items(app, &[&header, &sep1, &open_dashboard, &always_on_top, &mini_view, &sep_dashboard])?;
 
     for item in &session_items {
         menu.append(item)?;
@@ -396,13 +412,13 @@ fn build_menu<R: Runtime>(app: &tauri::AppHandle<R>, state: &AppState) -> tauri:
     menu.append(&sep2)?;
     menu.append(&quit)?;
 
-    Ok((menu, always_on_top))
+    Ok((menu, always_on_top, mini_view))
 }
 
 fn update_tray_and_badge<R: Runtime>(app: &tauri::AppHandle<R>, state: &AppState) {
     // Update tray menu
     if let Some(tray) = app.tray_by_id("main") {
-        if let Ok((new_menu, _)) = build_menu(app, state) {
+        if let Ok((new_menu, _, _)) = build_menu(app, state) {
             let _ = tray.set_menu(Some(new_menu));
         }
 
@@ -452,6 +468,24 @@ fn toggle_always_on_top<R: Runtime>(app: &tauri::AppHandle<R>, state: &mut AppSt
     }
 }
 
+fn toggle_mini_view<R: Runtime>(app: &tauri::AppHandle<R>, state: &mut AppState) {
+    state.settings.mini_view = !state.settings.mini_view;
+    save_settings(&state.settings);
+
+    if let Some(window) = app.get_webview_window("dashboard") {
+        let _ = window.set_decorations(!state.settings.mini_view);
+        if state.settings.mini_view {
+            let _ = window.set_size(tauri::LogicalSize::new(MINI_VIEW_WIDTH, MINI_VIEW_HEIGHT));
+        } else {
+            let _ = window.set_size(tauri::LogicalSize::new(NORMAL_VIEW_WIDTH, NORMAL_VIEW_HEIGHT));
+            let _ = window.center();
+        }
+    }
+
+    // Emit settings update to frontend
+    let _ = app.emit("settings-updated", &state.settings);
+}
+
 #[tauri::command]
 fn get_dashboard_data(state: tauri::State<'_, ManagedState>) -> DashboardData {
     let state_guard = state.0.lock().unwrap();
@@ -491,6 +525,37 @@ fn set_always_on_top(enabled: bool, state: tauri::State<'_, ManagedState>, app: 
     }
 
     update_tray_and_badge(&app, &state_guard);
+}
+
+#[tauri::command]
+fn get_mini_view(state: tauri::State<'_, ManagedState>) -> bool {
+    let state_guard = state.0.lock().unwrap();
+    state_guard.settings.mini_view
+}
+
+#[tauri::command]
+fn set_mini_view(enabled: bool, state: tauri::State<'_, ManagedState>, app: tauri::AppHandle) {
+    let mut state_guard = state.0.lock().unwrap();
+    state_guard.settings.mini_view = enabled;
+    save_settings(&state_guard.settings);
+
+    if let Some(window) = app.get_webview_window("dashboard") {
+        let _ = window.set_decorations(!enabled);
+        if enabled {
+            let _ = window.set_size(tauri::LogicalSize::new(MINI_VIEW_WIDTH, MINI_VIEW_HEIGHT));
+        } else {
+            let _ = window.set_size(tauri::LogicalSize::new(NORMAL_VIEW_WIDTH, NORMAL_VIEW_HEIGHT));
+            let _ = window.center();
+        }
+    }
+
+    update_tray_and_badge(&app, &state_guard);
+}
+
+#[tauri::command]
+fn get_settings(state: tauri::State<'_, ManagedState>) -> Settings {
+    let state_guard = state.0.lock().unwrap();
+    state_guard.settings.clone()
 }
 
 fn main() {
@@ -533,19 +598,29 @@ fn main() {
             remove_session,
             clear_all_sessions,
             get_always_on_top,
-            set_always_on_top
+            set_always_on_top,
+            get_mini_view,
+            set_mini_view,
+            get_settings
         ])
         .setup(move |app| {
             let app_handle = app.handle().clone();
             let state_for_tray = Arc::clone(&state_clone);
 
-            // Get initial always_on_top setting
-            let always_on_top = {
+            // Get initial settings
+            let (always_on_top, mini_view) = {
                 let state_guard = state_for_tray.lock().unwrap();
-                state_guard.settings.always_on_top
+                (state_guard.settings.always_on_top, state_guard.settings.mini_view)
             };
 
-            // Create dashboard window (hidden initially, with always_on_top setting)
+            // Determine initial window size based on mini_view setting
+            let (width, height) = if mini_view {
+                (MINI_VIEW_WIDTH, MINI_VIEW_HEIGHT)
+            } else {
+                (NORMAL_VIEW_WIDTH, NORMAL_VIEW_HEIGHT)
+            };
+
+            // Create dashboard window (hidden initially, with settings applied)
             let dashboard_window = if let Ok(icon) = Image::from_bytes(ICON_NORMAL) {
                 WebviewWindowBuilder::new(
                     app,
@@ -553,11 +628,12 @@ fn main() {
                     WebviewUrl::App("index.html".into()),
                 )
                 .title("Claude Monitor - Dashboard")
-                .inner_size(900.0, 700.0)
-                .min_inner_size(600.0, 400.0)
+                .inner_size(width, height)
+                .min_inner_size(200.0, 300.0)
                 .center()
                 .visible(false)
                 .always_on_top(always_on_top)
+                .decorations(!mini_view)
                 .icon(icon)?
                 .build()?
             } else {
@@ -567,11 +643,12 @@ fn main() {
                     WebviewUrl::App("index.html".into()),
                 )
                 .title("Claude Monitor - Dashboard")
-                .inner_size(900.0, 700.0)
-                .min_inner_size(600.0, 400.0)
+                .inner_size(width, height)
+                .min_inner_size(200.0, 300.0)
                 .center()
                 .visible(false)
                 .always_on_top(always_on_top)
+                .decorations(!mini_view)
                 .build()?
             };
 
@@ -596,7 +673,7 @@ fn main() {
             });
 
             // Build initial menu
-            let (menu, _) = {
+            let (menu, _, _) = {
                 let state_guard = state_for_tray.lock().unwrap();
                 build_menu(&app_handle, &state_guard)?
             };
@@ -620,6 +697,11 @@ fn main() {
                         "always_on_top" => {
                             let mut state_guard = state_for_tray.lock().unwrap();
                             toggle_always_on_top(app, &mut state_guard);
+                            update_tray_and_badge(app, &state_guard);
+                        }
+                        "mini_view" => {
+                            let mut state_guard = state_for_tray.lock().unwrap();
+                            toggle_mini_view(app, &mut state_guard);
                             update_tray_and_badge(app, &state_guard);
                         }
                         "open_logs" => {
