@@ -42,7 +42,7 @@ TIMESTAMP=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 TIMESTAMP_LOCAL=$(date +%H:%M:%S)
 
 # ペイロード作成
-PAYLOAD=$(jq -n \
+PAYLOAD=$(jq -nc \
   --arg event "$EVENT_TYPE" \
   --arg matcher "$MATCHER" \
   --arg project_dir "$PROJECT_DIR" \
