@@ -10,3 +10,5 @@ claude-monitor-tauri/node_modules/
 # IDE
 .idea/
 .vscode/
+
+*.local*
