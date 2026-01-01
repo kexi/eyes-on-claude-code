@@ -8,10 +8,14 @@ use std::io::{BufRead, BufReader, Seek, SeekFrom};
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use tauri::{
-    menu::{Menu, MenuItem, MenuItemBuilder, PredefinedMenuItem, SubmenuBuilder},
+    image::Image,
+    menu::{MenuItemBuilder, PredefinedMenuItem, SubmenuBuilder, Menu},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
     Manager, Runtime,
 };
+
+const ICON_NORMAL: &[u8] = include_bytes!("../icons/icon.png");
+const ICON_WAITING: &[u8] = include_bytes!("../icons/icon-waiting.png");
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct EventInfo {
@@ -56,6 +60,14 @@ struct AppState {
     sessions: HashMap<String, SessionInfo>,
     recent_events: Vec<EventInfo>,
     last_file_pos: u64,
+}
+
+impl AppState {
+    fn has_waiting_sessions(&self) -> bool {
+        self.sessions.values().any(|s| {
+            s.status == SessionStatus::WaitingPermission || s.status == SessionStatus::WaitingInput
+        })
+    }
 }
 
 impl Default for AppState {
@@ -178,7 +190,7 @@ fn build_menu<R: Runtime>(app: &tauri::AppHandle<R>, state: &AppState) -> tauri:
 
     // Header
     let header_text = if waiting_count > 0 {
-        format!("{} session(s) waiting", waiting_count)
+        format!("⚠️ {} session(s) waiting", waiting_count)
     } else if state.sessions.is_empty() {
         "No active sessions".to_string()
     } else {
@@ -247,27 +259,57 @@ fn build_menu<R: Runtime>(app: &tauri::AppHandle<R>, state: &AppState) -> tauri:
         .build(app)?;
 
     // Build menu
-    let mut menu_builder = Menu::with_items(app, &[&header, &sep1])?;
+    let menu = Menu::with_items(app, &[&header, &sep1])?;
 
     for item in &session_items {
-        menu_builder.append(item)?;
+        menu.append(item)?;
     }
 
     if !session_items.is_empty() {
-        menu_builder.append(&PredefinedMenuItem::separator(app)?)?;
+        menu.append(&PredefinedMenuItem::separator(app)?)?;
     }
 
     if let Some(submenu) = &events_submenu {
-        menu_builder.append(submenu)?;
-        menu_builder.append(&PredefinedMenuItem::separator(app)?)?;
+        menu.append(submenu)?;
+        menu.append(&PredefinedMenuItem::separator(app)?)?;
     }
 
-    menu_builder.append(&open_logs)?;
-    menu_builder.append(&clear_sessions)?;
-    menu_builder.append(&sep2)?;
-    menu_builder.append(&quit)?;
+    menu.append(&open_logs)?;
+    menu.append(&clear_sessions)?;
+    menu.append(&sep2)?;
+    menu.append(&quit)?;
 
-    Ok(menu_builder)
+    Ok(menu)
+}
+
+fn update_tray<R: Runtime>(app: &tauri::AppHandle<R>, state: &AppState) {
+    if let Some(tray) = app.tray_by_id("main") {
+        // Update menu
+        if let Ok(new_menu) = build_menu(app, state) {
+            let _ = tray.set_menu(Some(new_menu));
+        }
+
+        // Update icon based on state
+        let icon_bytes = if state.has_waiting_sessions() {
+            ICON_WAITING
+        } else {
+            ICON_NORMAL
+        };
+
+        if let Ok(icon) = Image::from_bytes(icon_bytes) {
+            let _ = tray.set_icon(Some(icon));
+        }
+
+        // Update tooltip
+        let tooltip = if state.has_waiting_sessions() {
+            "Claude Monitor - Action Required!"
+        } else if state.sessions.is_empty() {
+            "Claude Monitor - No active sessions"
+        } else {
+            "Claude Monitor"
+        };
+        let _ = tray.set_tooltip(Some(tooltip));
+    }
 }
 
 fn main() {
@@ -307,8 +349,19 @@ fn main() {
                 build_menu(&app_handle, &state_guard)?
             };
 
+            // Determine initial icon
+            let initial_icon = {
+                let state_guard = state_for_tray.lock().unwrap();
+                if state_guard.has_waiting_sessions() {
+                    Image::from_bytes(ICON_WAITING)?
+                } else {
+                    Image::from_bytes(ICON_NORMAL)?
+                }
+            };
+
             // Create tray icon
-            let _tray = TrayIconBuilder::new()
+            let _tray = TrayIconBuilder::with_id("main")
+                .icon(initial_icon)
                 .menu(&menu)
                 .show_menu_on_left_click(true)
                 .tooltip("Claude Monitor")
@@ -324,11 +377,7 @@ fn main() {
                         "clear_sessions" => {
                             let mut state_guard = state_for_tray.lock().unwrap();
                             state_guard.sessions.clear();
-                            if let Ok(new_menu) = build_menu(app, &state_guard) {
-                                if let Some(tray) = app.tray_by_id("main") {
-                                    let _ = tray.set_menu(Some(new_menu));
-                                }
-                            }
+                            update_tray(app, &state_guard);
                         }
                         _ => {}
                     }
@@ -369,12 +418,7 @@ fn main() {
                             let new_events = read_new_events(&mut state_guard);
 
                             if !new_events.is_empty() {
-                                if let Ok(new_menu) = build_menu(&app_handle_for_watcher, &state_guard)
-                                {
-                                    if let Some(tray) = app_handle_for_watcher.tray_by_id("main") {
-                                        let _ = tray.set_menu(Some(new_menu));
-                                    }
-                                }
+                                update_tray(&app_handle_for_watcher, &state_guard);
                             }
                         }
                         Err(e) => {

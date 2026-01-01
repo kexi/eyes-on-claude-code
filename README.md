@@ -168,10 +168,110 @@ rm -f ~/.claude-monitor/logs/*.jsonl ~/.claude-monitor/logs/*.log ~/.claude-moni
    cat ~/.claude-monitor/logs/latest.json
    ```
 
-## 次のステップ
+## デスクトップアプリ (Tauri)
 
-このプロトタイプで動作確認ができたら：
+`claude-monitor-tauri/` にメニューバー常駐アプリがあります。
 
-1. **デーモン化** - ログファイルではなくHTTP/WebSocketでイベントを受信
-2. **デスクトップアプリ** - Tauriでリアルタイム表示・通知
-3. **状態管理** - セッション状態のトラッキングと永続化
+### 機能
+
+- メニューバーにアイコン表示
+- セッション状態のリアルタイム監視
+- waiting状態でアイコン色が変化（グレー → オレンジ）
+- Recent Events サブメニュー
+- ログフォルダを開く機能
+
+### 必要環境
+
+- Rust (rustup)
+- Node.js & npm
+
+### 開発環境セットアップ
+
+```bash
+# Rustのインストール（未インストールの場合）
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+source "$HOME/.cargo/env"
+
+# プロジェクトディレクトリに移動
+cd claude-monitor-tauri
+
+# 依存関係インストール
+npm install
+```
+
+### 開発モードで起動
+
+```bash
+# Cargo を PATH に追加（シェル起動時に自動で追加されない場合）
+source "$HOME/.cargo/env"
+
+cd claude-monitor-tauri
+npm run dev
+```
+
+### リリースビルド
+
+```bash
+source "$HOME/.cargo/env"
+cd claude-monitor-tauri
+npm run build
+
+# 成果物
+# - src-tauri/target/release/bundle/macos/Claude Monitor.app
+# - src-tauri/target/release/bundle/dmg/Claude Monitor_1.0.0_aarch64.dmg
+```
+
+### 動作確認手順
+
+1. **アプリを起動**
+   ```bash
+   open src-tauri/target/release/bundle/macos/Claude\ Monitor.app
+   ```
+
+2. **テストイベントを送信**
+   ```bash
+   # セッション開始
+   echo '{"session_id": "test-001"}' | \
+     CLAUDE_PROJECT_DIR="/path/to/project" \
+     ~/.local/bin/claude-monitor-hook session_start startup
+
+   # permission待ち（アイコンがオレンジに変化）
+   echo '{"session_id": "test-001", "notification_type": "permission_prompt"}' | \
+     CLAUDE_PROJECT_DIR="/path/to/project" \
+     ~/.local/bin/claude-monitor-hook notification permission_prompt
+
+   # 完了（アイコンがグレーに戻る）
+   echo '{"session_id": "test-001"}' | \
+     CLAUDE_PROJECT_DIR="/path/to/project" \
+     ~/.local/bin/claude-monitor-hook stop
+
+   # セッション終了
+   echo '{"session_id": "test-001"}' | \
+     CLAUDE_PROJECT_DIR="/path/to/project" \
+     ~/.local/bin/claude-monitor-hook session_end
+   ```
+
+3. **メニューバーで確認**
+   - アイコンをクリックしてメニューを表示
+   - セッション一覧、Recent Events を確認
+
+### ログファイルのリセット
+
+```bash
+rm ~/.claude-monitor/logs/events.jsonl
+touch ~/.claude-monitor/logs/events.jsonl
+```
+
+### インストール
+
+```bash
+# install.sh を使用
+./install.sh
+
+# または手動で ~/Applications にコピー
+cp -r claude-monitor-tauri/src-tauri/target/release/bundle/macos/Claude\ Monitor.app ~/Applications/
+```
+
+### ログイン時に自動起動
+
+システム設定 > 一般 > ログイン項目 に `Claude Monitor.app` を追加
