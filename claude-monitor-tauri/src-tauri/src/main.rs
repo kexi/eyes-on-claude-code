@@ -135,29 +135,55 @@ fn process_event(state: &mut AppState, event: EventInfo) {
             state.sessions.remove(&key);
         }
         "notification" => {
-            if let Some(session) = state.sessions.get_mut(&key) {
-                session.status = match event.notification_type.as_str() {
-                    "permission_prompt" => SessionStatus::WaitingPermission,
-                    "idle_prompt" => SessionStatus::WaitingInput,
-                    _ => session.status.clone(),
-                };
-                session.last_event = event.timestamp;
-            }
+            let new_status = match event.notification_type.as_str() {
+                "permission_prompt" => SessionStatus::WaitingPermission,
+                "idle_prompt" => SessionStatus::WaitingInput,
+                _ => SessionStatus::Active,
+            };
+            state.sessions
+                .entry(key)
+                .and_modify(|s| {
+                    s.status = new_status.clone();
+                    s.last_event = event.timestamp.clone();
+                })
+                .or_insert_with(|| SessionInfo {
+                    project_name: event.project_name,
+                    project_dir: event.project_dir,
+                    status: new_status,
+                    last_event: event.timestamp,
+                });
         }
         "stop" => {
-            if let Some(session) = state.sessions.get_mut(&key) {
-                session.status = SessionStatus::Completed;
-                session.last_event = event.timestamp;
-            }
+            state.sessions
+                .entry(key)
+                .and_modify(|s| {
+                    s.status = SessionStatus::Completed;
+                    s.last_event = event.timestamp.clone();
+                })
+                .or_insert_with(|| SessionInfo {
+                    project_name: event.project_name,
+                    project_dir: event.project_dir,
+                    status: SessionStatus::Completed,
+                    last_event: event.timestamp,
+                });
         }
         "post_tool_use" => {
             // After a tool is used, the session is active again
-            if let Some(session) = state.sessions.get_mut(&key) {
-                session.status = SessionStatus::Active;
-                session.last_event = event.timestamp;
-            }
+            state.sessions
+                .entry(key)
+                .and_modify(|s| {
+                    s.status = SessionStatus::Active;
+                    s.last_event = event.timestamp.clone();
+                })
+                .or_insert_with(|| SessionInfo {
+                    project_name: event.project_name,
+                    project_dir: event.project_dir,
+                    status: SessionStatus::Active,
+                    last_event: event.timestamp,
+                });
         }
         _ => {
+            // For unknown events, only update if session exists (don't auto-create)
             if let Some(session) = state.sessions.get_mut(&key) {
                 session.last_event = event.timestamp;
             }
