@@ -11,7 +11,7 @@ use tauri::{
     image::Image,
     menu::{MenuItemBuilder, PredefinedMenuItem, SubmenuBuilder, Menu},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
-    Manager, Runtime,
+    Runtime,
 };
 
 const ICON_NORMAL: &[u8] = include_bytes!("../icons/icon.png");
@@ -32,6 +32,7 @@ struct EventInfo {
 #[derive(Debug, Clone)]
 struct SessionInfo {
     project_name: String,
+    #[allow(dead_code)]
     project_dir: String,
     status: SessionStatus,
     last_event: String,
