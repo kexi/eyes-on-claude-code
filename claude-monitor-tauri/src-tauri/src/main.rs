@@ -150,6 +150,13 @@ fn process_event(state: &mut AppState, event: EventInfo) {
                 session.last_event = event.timestamp;
             }
         }
+        "post_tool_use" => {
+            // After a tool is used, the session is active again
+            if let Some(session) = state.sessions.get_mut(&key) {
+                session.status = SessionStatus::Active;
+                session.last_event = event.timestamp;
+            }
+        }
         _ => {
             if let Some(session) = state.sessions.get_mut(&key) {
                 session.last_event = event.timestamp;
