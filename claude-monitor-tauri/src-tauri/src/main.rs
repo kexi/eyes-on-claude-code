@@ -11,7 +11,7 @@ use tauri::{
     image::Image,
     menu::{MenuItemBuilder, PredefinedMenuItem, SubmenuBuilder, Menu},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
-    Runtime,
+    Emitter, Manager, Runtime, WebviewUrl, WebviewWindowBuilder,
 };
 
 const ICON_NORMAL: &[u8] = include_bytes!("../icons/icon.png");
@@ -29,16 +29,15 @@ struct EventInfo {
     notification_type: String,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 struct SessionInfo {
     project_name: String,
-    #[allow(dead_code)]
     project_dir: String,
     status: SessionStatus,
     last_event: String,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 enum SessionStatus {
     Active,
     WaitingPermission,
@@ -57,6 +56,12 @@ impl SessionStatus {
     }
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct DashboardData {
+    sessions: Vec<SessionInfo>,
+    events: Vec<EventInfo>,
+}
+
 struct AppState {
     sessions: HashMap<String, SessionInfo>,
     recent_events: Vec<EventInfo>,
@@ -69,6 +74,13 @@ impl AppState {
             s.status == SessionStatus::WaitingPermission || s.status == SessionStatus::WaitingInput
         })
     }
+
+    fn to_dashboard_data(&self) -> DashboardData {
+        DashboardData {
+            sessions: self.sessions.values().cloned().collect(),
+            events: self.recent_events.clone(),
+        }
+    }
 }
 
 impl Default for AppState {
@@ -80,6 +92,9 @@ impl Default for AppState {
         }
     }
 }
+
+// Wrapper for thread-safe state management
+struct ManagedState(Arc<Mutex<AppState>>);
 
 fn get_log_dir() -> PathBuf {
     dirs::home_dir()
@@ -94,7 +109,7 @@ fn get_events_file() -> PathBuf {
 
 fn process_event(state: &mut AppState, event: EventInfo) {
     state.recent_events.push(event.clone());
-    if state.recent_events.len() > 20 {
+    if state.recent_events.len() > 50 {
         state.recent_events.remove(0);
     }
 
@@ -204,6 +219,13 @@ fn build_menu<R: Runtime>(app: &tauri::AppHandle<R>, state: &AppState) -> tauri:
 
     let sep1 = PredefinedMenuItem::separator(app)?;
 
+    // Open Dashboard
+    let open_dashboard = MenuItemBuilder::with_id("open_dashboard", "Open Dashboard")
+        .accelerator("CmdOrCtrl+D")
+        .build(app)?;
+
+    let sep_dashboard = PredefinedMenuItem::separator(app)?;
+
     // Sessions section
     let mut session_items = Vec::new();
     if !state.sessions.is_empty() {
@@ -260,7 +282,7 @@ fn build_menu<R: Runtime>(app: &tauri::AppHandle<R>, state: &AppState) -> tauri:
         .build(app)?;
 
     // Build menu
-    let menu = Menu::with_items(app, &[&header, &sep1])?;
+    let menu = Menu::with_items(app, &[&header, &sep1, &open_dashboard, &sep_dashboard])?;
 
     for item in &session_items {
         menu.append(item)?;
@@ -313,6 +335,39 @@ fn update_tray<R: Runtime>(app: &tauri::AppHandle<R>, state: &AppState) {
     }
 }
 
+fn emit_state_update<R: Runtime>(app: &tauri::AppHandle<R>, state: &AppState) {
+    let data = state.to_dashboard_data();
+    let _ = app.emit("state-updated", &data);
+}
+
+fn open_dashboard<R: Runtime>(app: &tauri::AppHandle<R>) {
+    // Check if window already exists
+    if let Some(window) = app.get_webview_window("dashboard") {
+        let _ = window.show();
+        let _ = window.set_focus();
+        return;
+    }
+
+    // Create new window
+    let _ = WebviewWindowBuilder::new(
+        app,
+        "dashboard",
+        WebviewUrl::App("index.html".into()),
+    )
+    .title("Claude Monitor - Dashboard")
+    .inner_size(900.0, 700.0)
+    .min_inner_size(600.0, 400.0)
+    .center()
+    .build();
+}
+
+// Tauri command to get dashboard data
+#[tauri::command]
+fn get_dashboard_data(state: tauri::State<'_, ManagedState>) -> DashboardData {
+    let state_guard = state.0.lock().unwrap();
+    state_guard.to_dashboard_data()
+}
+
 fn main() {
     let state = Arc::new(Mutex::new(AppState::default()));
 
@@ -337,9 +392,12 @@ fn main() {
     }
 
     let state_clone = Arc::clone(&state);
+    let state_for_managed = Arc::clone(&state);
 
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
+        .manage(ManagedState(state_for_managed))
+        .invoke_handler(tauri::generate_handler![get_dashboard_data])
         .setup(move |app| {
             let app_handle = app.handle().clone();
             let state_for_tray = Arc::clone(&state_clone);
@@ -371,6 +429,9 @@ fn main() {
                         "quit" => {
                             app.exit(0);
                         }
+                        "open_dashboard" => {
+                            open_dashboard(app);
+                        }
                         "open_logs" => {
                             let log_dir = get_log_dir();
                             let _ = opener::open(&log_dir);
@@ -379,6 +440,7 @@ fn main() {
                             let mut state_guard = state_for_tray.lock().unwrap();
                             state_guard.sessions.clear();
                             update_tray(app, &state_guard);
+                            emit_state_update(app, &state_guard);
                         }
                         _ => {}
                     }
@@ -420,6 +482,7 @@ fn main() {
 
                             if !new_events.is_empty() {
                                 update_tray(&app_handle_for_watcher, &state_guard);
+                                emit_state_update(&app_handle_for_watcher, &state_guard);
                             }
                         }
                         Err(e) => {
