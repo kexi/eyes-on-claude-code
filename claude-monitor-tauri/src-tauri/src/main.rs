@@ -1,0 +1,392 @@
+#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
+
+use notify::{Config, RecommendedWatcher, RecursiveMode, Watcher};
+use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
+use std::fs::{self, File};
+use std::io::{BufRead, BufReader, Seek, SeekFrom};
+use std::path::PathBuf;
+use std::sync::{Arc, Mutex};
+use tauri::{
+    menu::{Menu, MenuItem, MenuItemBuilder, PredefinedMenuItem, SubmenuBuilder},
+    tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
+    Manager, Runtime,
+};
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct EventInfo {
+    timestamp: String,
+    event: String,
+    matcher: String,
+    project_name: String,
+    project_dir: String,
+    session_id: String,
+    message: String,
+    notification_type: String,
+}
+
+#[derive(Debug, Clone)]
+struct SessionInfo {
+    project_name: String,
+    project_dir: String,
+    status: SessionStatus,
+    last_event: String,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+enum SessionStatus {
+    Active,
+    WaitingPermission,
+    WaitingInput,
+    Completed,
+}
+
+impl SessionStatus {
+    fn emoji(&self) -> &str {
+        match self {
+            SessionStatus::Active => "🟢",
+            SessionStatus::WaitingPermission => "🔐",
+            SessionStatus::WaitingInput => "⏳",
+            SessionStatus::Completed => "✅",
+        }
+    }
+}
+
+struct AppState {
+    sessions: HashMap<String, SessionInfo>,
+    recent_events: Vec<EventInfo>,
+    last_file_pos: u64,
+}
+
+impl Default for AppState {
+    fn default() -> Self {
+        Self {
+            sessions: HashMap::new(),
+            recent_events: Vec::new(),
+            last_file_pos: 0,
+        }
+    }
+}
+
+fn get_log_dir() -> PathBuf {
+    dirs::home_dir()
+        .unwrap_or_default()
+        .join(".claude-monitor")
+        .join("logs")
+}
+
+fn get_events_file() -> PathBuf {
+    get_log_dir().join("events.jsonl")
+}
+
+fn process_event(state: &mut AppState, event: EventInfo) {
+    state.recent_events.push(event.clone());
+    if state.recent_events.len() > 20 {
+        state.recent_events.remove(0);
+    }
+
+    let key = if event.project_dir.is_empty() {
+        event.project_name.clone()
+    } else {
+        event.project_dir.clone()
+    };
+
+    match event.event.as_str() {
+        "session_start" => {
+            state.sessions.insert(
+                key,
+                SessionInfo {
+                    project_name: event.project_name,
+                    project_dir: event.project_dir,
+                    status: SessionStatus::Active,
+                    last_event: event.timestamp,
+                },
+            );
+        }
+        "session_end" => {
+            state.sessions.remove(&key);
+        }
+        "notification" => {
+            if let Some(session) = state.sessions.get_mut(&key) {
+                session.status = match event.notification_type.as_str() {
+                    "permission_prompt" => SessionStatus::WaitingPermission,
+                    "idle_prompt" => SessionStatus::WaitingInput,
+                    _ => session.status.clone(),
+                };
+                session.last_event = event.timestamp;
+            }
+        }
+        "stop" => {
+            if let Some(session) = state.sessions.get_mut(&key) {
+                session.status = SessionStatus::Completed;
+                session.last_event = event.timestamp;
+            }
+        }
+        _ => {
+            if let Some(session) = state.sessions.get_mut(&key) {
+                session.last_event = event.timestamp;
+            }
+        }
+    }
+}
+
+fn read_new_events(state: &mut AppState) -> Vec<EventInfo> {
+    let events_file = get_events_file();
+    let mut new_events = Vec::new();
+
+    if !events_file.exists() {
+        return new_events;
+    }
+
+    if let Ok(mut file) = File::open(&events_file) {
+        if let Ok(metadata) = file.metadata() {
+            let file_size = metadata.len();
+
+            if file_size < state.last_file_pos {
+                state.last_file_pos = 0;
+            }
+
+            if file_size > state.last_file_pos {
+                let _ = file.seek(SeekFrom::Start(state.last_file_pos));
+                let reader = BufReader::new(&file);
+
+                for line in reader.lines().map_while(Result::ok) {
+                    if !line.is_empty() {
+                        if let Ok(event) = serde_json::from_str::<EventInfo>(&line) {
+                            process_event(state, event.clone());
+                            new_events.push(event);
+                        }
+                    }
+                }
+
+                state.last_file_pos = file_size;
+            }
+        }
+    }
+
+    new_events
+}
+
+fn build_menu<R: Runtime>(app: &tauri::AppHandle<R>, state: &AppState) -> tauri::Result<Menu<R>> {
+    let waiting_count = state
+        .sessions
+        .values()
+        .filter(|s| {
+            s.status == SessionStatus::WaitingPermission || s.status == SessionStatus::WaitingInput
+        })
+        .count();
+
+    // Header
+    let header_text = if waiting_count > 0 {
+        format!("{} session(s) waiting", waiting_count)
+    } else if state.sessions.is_empty() {
+        "No active sessions".to_string()
+    } else {
+        format!("{} active session(s)", state.sessions.len())
+    };
+
+    let header = MenuItemBuilder::with_id("header", &header_text)
+        .enabled(false)
+        .build(app)?;
+
+    let sep1 = PredefinedMenuItem::separator(app)?;
+
+    // Sessions section
+    let mut session_items = Vec::new();
+    if !state.sessions.is_empty() {
+        let sessions_header = MenuItemBuilder::with_id("sessions_header", "Sessions")
+            .enabled(false)
+            .build(app)?;
+        session_items.push(sessions_header);
+
+        for (_, session) in &state.sessions {
+            let emoji = session.status.emoji();
+            let title = format!("{} {}", emoji, session.project_name);
+            let item = MenuItemBuilder::with_id(format!("session_{}", session.project_name), &title)
+                .enabled(false)
+                .build(app)?;
+            session_items.push(item);
+        }
+    }
+
+    // Recent events submenu
+    let events_submenu = if !state.recent_events.is_empty() {
+        let mut submenu_builder = SubmenuBuilder::new(app, "Recent Events");
+        for (idx, event) in state.recent_events.iter().rev().take(10).enumerate() {
+            let emoji = match event.event.as_str() {
+                "notification" => match event.notification_type.as_str() {
+                    "permission_prompt" => "🔐",
+                    "idle_prompt" => "⏳",
+                    _ => "🔔",
+                },
+                "stop" => "✅",
+                "session_start" => "🚀",
+                "session_end" => "🏁",
+                _ => "📌",
+            };
+            let title = format!("{} {}: {}", emoji, event.project_name, event.event);
+            let item = MenuItemBuilder::with_id(format!("event_{}", idx), &title)
+                .enabled(false)
+                .build(app)?;
+            submenu_builder = submenu_builder.item(&item);
+        }
+        Some(submenu_builder.build()?)
+    } else {
+        None
+    };
+
+    // Actions
+    let open_logs = MenuItemBuilder::with_id("open_logs", "Open Log Folder")
+        .build(app)?;
+    let clear_sessions = MenuItemBuilder::with_id("clear_sessions", "Clear Sessions")
+        .build(app)?;
+
+    let sep2 = PredefinedMenuItem::separator(app)?;
+    let quit = MenuItemBuilder::with_id("quit", "Quit")
+        .accelerator("CmdOrCtrl+Q")
+        .build(app)?;
+
+    // Build menu
+    let mut menu_builder = Menu::with_items(app, &[&header, &sep1])?;
+
+    for item in &session_items {
+        menu_builder.append(item)?;
+    }
+
+    if !session_items.is_empty() {
+        menu_builder.append(&PredefinedMenuItem::separator(app)?)?;
+    }
+
+    if let Some(submenu) = &events_submenu {
+        menu_builder.append(submenu)?;
+        menu_builder.append(&PredefinedMenuItem::separator(app)?)?;
+    }
+
+    menu_builder.append(&open_logs)?;
+    menu_builder.append(&clear_sessions)?;
+    menu_builder.append(&sep2)?;
+    menu_builder.append(&quit)?;
+
+    Ok(menu_builder)
+}
+
+fn main() {
+    let state = Arc::new(Mutex::new(AppState::default()));
+
+    // Load existing events
+    {
+        let mut state_guard = state.lock().unwrap();
+        let events_file = get_events_file();
+        if events_file.exists() {
+            if let Ok(content) = fs::read_to_string(&events_file) {
+                for line in content.lines() {
+                    if !line.is_empty() {
+                        if let Ok(event) = serde_json::from_str::<EventInfo>(line) {
+                            process_event(&mut state_guard, event);
+                        }
+                    }
+                }
+                if let Ok(metadata) = fs::metadata(&events_file) {
+                    state_guard.last_file_pos = metadata.len();
+                }
+            }
+        }
+    }
+
+    let state_clone = Arc::clone(&state);
+
+    tauri::Builder::default()
+        .plugin(tauri_plugin_shell::init())
+        .setup(move |app| {
+            let app_handle = app.handle().clone();
+            let state_for_tray = Arc::clone(&state_clone);
+
+            // Build initial menu
+            let menu = {
+                let state_guard = state_for_tray.lock().unwrap();
+                build_menu(&app_handle, &state_guard)?
+            };
+
+            // Create tray icon
+            let _tray = TrayIconBuilder::new()
+                .menu(&menu)
+                .show_menu_on_left_click(true)
+                .tooltip("Claude Monitor")
+                .on_menu_event(move |app, event| {
+                    match event.id.as_ref() {
+                        "quit" => {
+                            app.exit(0);
+                        }
+                        "open_logs" => {
+                            let log_dir = get_log_dir();
+                            let _ = opener::open(&log_dir);
+                        }
+                        "clear_sessions" => {
+                            let mut state_guard = state_for_tray.lock().unwrap();
+                            state_guard.sessions.clear();
+                            if let Ok(new_menu) = build_menu(app, &state_guard) {
+                                if let Some(tray) = app.tray_by_id("main") {
+                                    let _ = tray.set_menu(Some(new_menu));
+                                }
+                            }
+                        }
+                        _ => {}
+                    }
+                })
+                .on_tray_icon_event(|_tray, event| {
+                    if let TrayIconEvent::Click {
+                        button: MouseButton::Left,
+                        button_state: MouseButtonState::Up,
+                        ..
+                    } = event
+                    {
+                        // Menu will show automatically
+                    }
+                })
+                .build(app)?;
+
+            // Start file watcher
+            let state_for_watcher = Arc::clone(&state_clone);
+            let app_handle_for_watcher = app.handle().clone();
+
+            std::thread::spawn(move || {
+                let log_dir = get_log_dir();
+                let _ = fs::create_dir_all(&log_dir);
+
+                let (tx, rx) = std::sync::mpsc::channel();
+
+                let mut watcher =
+                    RecommendedWatcher::new(tx, Config::default()).expect("Failed to create watcher");
+
+                watcher
+                    .watch(&log_dir, RecursiveMode::NonRecursive)
+                    .expect("Failed to watch directory");
+
+                loop {
+                    match rx.recv() {
+                        Ok(_event) => {
+                            let mut state_guard = state_for_watcher.lock().unwrap();
+                            let new_events = read_new_events(&mut state_guard);
+
+                            if !new_events.is_empty() {
+                                if let Ok(new_menu) = build_menu(&app_handle_for_watcher, &state_guard)
+                                {
+                                    if let Some(tray) = app_handle_for_watcher.tray_by_id("main") {
+                                        let _ = tray.set_menu(Some(new_menu));
+                                    }
+                                }
+                            }
+                        }
+                        Err(e) => {
+                            eprintln!("Watch error: {:?}", e);
+                            break;
+                        }
+                    }
+                }
+            });
+
+            Ok(())
+        })
+        .run(tauri::generate_context!())
+        .expect("error while running tauri application");
+}
