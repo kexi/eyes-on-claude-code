@@ -27,6 +27,8 @@ struct EventInfo {
     session_id: String,
     message: String,
     notification_type: String,
+    #[serde(default)]
+    tool_name: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -35,6 +37,8 @@ struct SessionInfo {
     project_dir: String,
     status: SessionStatus,
     last_event: String,
+    #[serde(default)]
+    waiting_for: String,  // Tool name or message when waiting
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -128,6 +132,7 @@ fn process_event(state: &mut AppState, event: EventInfo) {
                     project_dir: event.project_dir,
                     status: SessionStatus::Active,
                     last_event: event.timestamp,
+                    waiting_for: String::new(),
                 },
             );
         }
@@ -140,17 +145,27 @@ fn process_event(state: &mut AppState, event: EventInfo) {
                 "idle_prompt" => SessionStatus::WaitingInput,
                 _ => SessionStatus::Active,
             };
+            // Use message if available, otherwise use tool_name
+            let waiting_info = if !event.message.is_empty() {
+                event.message.clone()
+            } else if !event.tool_name.is_empty() {
+                event.tool_name.clone()
+            } else {
+                String::new()
+            };
             state.sessions
                 .entry(key)
                 .and_modify(|s| {
                     s.status = new_status.clone();
                     s.last_event = event.timestamp.clone();
+                    s.waiting_for = waiting_info.clone();
                 })
                 .or_insert_with(|| SessionInfo {
                     project_name: event.project_name,
                     project_dir: event.project_dir,
                     status: new_status,
                     last_event: event.timestamp,
+                    waiting_for: waiting_info,
                 });
         }
         "stop" => {
@@ -159,12 +174,14 @@ fn process_event(state: &mut AppState, event: EventInfo) {
                 .and_modify(|s| {
                     s.status = SessionStatus::Completed;
                     s.last_event = event.timestamp.clone();
+                    s.waiting_for = String::new();
                 })
                 .or_insert_with(|| SessionInfo {
                     project_name: event.project_name,
                     project_dir: event.project_dir,
                     status: SessionStatus::Completed,
                     last_event: event.timestamp,
+                    waiting_for: String::new(),
                 });
         }
         "post_tool_use" => {
@@ -174,12 +191,14 @@ fn process_event(state: &mut AppState, event: EventInfo) {
                 .and_modify(|s| {
                     s.status = SessionStatus::Active;
                     s.last_event = event.timestamp.clone();
+                    s.waiting_for = String::new();
                 })
                 .or_insert_with(|| SessionInfo {
                     project_name: event.project_name,
                     project_dir: event.project_dir,
                     status: SessionStatus::Active,
                     last_event: event.timestamp,
+                    waiting_for: String::new(),
                 });
         }
         _ => {

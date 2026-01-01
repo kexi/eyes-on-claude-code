@@ -179,6 +179,16 @@
             font-family: monospace;
         }
 
+        .session-waiting-for {
+            font-size: 0.75rem;
+            color: var(--warning);
+            margin-top: 4px;
+            padding: 4px 8px;
+            background: rgba(251, 191, 36, 0.1);
+            border-radius: 4px;
+            display: inline-block;
+        }
+
         .session-status {
             text-align: right;
         }
@@ -432,6 +442,7 @@
                     <div class="session-info">
                         <div class="session-name">${session.project_name}</div>
                         <div class="session-path">${session.project_dir}</div>
+                        ${session.waiting_for ? `<div class="session-waiting-for">⏸ ${session.waiting_for}</div>` : ''}
                     </div>
                     <div class="session-actions">
                         <div class="session-status">

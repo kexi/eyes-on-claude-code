@@ -20,18 +20,30 @@ mkdir -p "$LOG_DIR"
 EVENT_TYPE="${1:-unknown}"
 MATCHER="${2:-}"
 
-# stdinからJSONを読み取り（タイムアウト付き）
-INPUT=$(timeout 5 cat 2>/dev/null || echo '{}')
+# stdinからJSONを読み取り
+# Note: Claude Code passes hook data via stdin as JSON
+INPUT=""
+if [ -t 0 ]; then
+    # stdin is a terminal, no input
+    INPUT='{}'
+else
+    # Read all stdin
+    INPUT=$(cat 2>/dev/null || echo '{}')
+fi
 
 # 入力が空の場合のフォールバック
 if [ -z "$INPUT" ] || [ "$INPUT" = "" ]; then
     INPUT='{}'
 fi
 
+# デバッグ: 生のstdin入力をログに保存
+echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] EVENT=$EVENT_TYPE MATCHER=$MATCHER INPUT=$INPUT" >> "${LOG_DIR}/stdin-debug.log"
+
 # セッションIDとメッセージを抽出
 SESSION_ID=$(echo "$INPUT" | jq -r '.session_id // "unknown"' 2>/dev/null || echo "unknown")
 MESSAGE=$(echo "$INPUT" | jq -r '.message // empty' 2>/dev/null || echo "")
 NOTIFICATION_TYPE=$(echo "$INPUT" | jq -r '.notification_type // empty' 2>/dev/null || echo "")
+TOOL_NAME=$(echo "$INPUT" | jq -r '.tool_name // empty' 2>/dev/null || echo "")
 
 # For notification events, use matcher as notification type if not in input
 if [ "$EVENT_TYPE" = "notification" ] && [ -z "$NOTIFICATION_TYPE" ]; then
@@ -55,6 +67,7 @@ PAYLOAD=$(jq -nc \
   --arg session_id "$SESSION_ID" \
   --arg message "$MESSAGE" \
   --arg notification_type "$NOTIFICATION_TYPE" \
+  --arg tool_name "$TOOL_NAME" \
   --arg timestamp "$TIMESTAMP" \
   --argjson input "$INPUT" \
   '{
@@ -66,6 +79,7 @@ PAYLOAD=$(jq -nc \
     session_id: $session_id,
     message: $message,
     notification_type: $notification_type,
+    tool_name: $tool_name,
     raw_input: $input
   }' 2>/dev/null || echo '{"error": "failed to create payload"}')
 
