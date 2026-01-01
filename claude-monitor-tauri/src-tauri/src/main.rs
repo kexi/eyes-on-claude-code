@@ -9,7 +9,7 @@ use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use tauri::{
     image::Image,
-    menu::{Menu, MenuItemBuilder, PredefinedMenuItem, SubmenuBuilder},
+    menu::{CheckMenuItem, CheckMenuItemBuilder, Menu, MenuItemBuilder, PredefinedMenuItem, SubmenuBuilder},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
     Emitter, Manager, Runtime, WebviewUrl, WebviewWindowBuilder,
 };
@@ -65,10 +65,29 @@ struct DashboardData {
     events: Vec<EventInfo>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct Settings {
+    #[serde(default = "default_always_on_top")]
+    always_on_top: bool,
+}
+
+fn default_always_on_top() -> bool {
+    true
+}
+
+impl Default for Settings {
+    fn default() -> Self {
+        Self {
+            always_on_top: true,
+        }
+    }
+}
+
 struct AppState {
     sessions: HashMap<String, SessionInfo>,
     recent_events: Vec<EventInfo>,
     last_file_pos: u64,
+    settings: Settings,
 }
 
 impl AppState {
@@ -95,21 +114,49 @@ impl Default for AppState {
             sessions: HashMap::new(),
             recent_events: Vec::new(),
             last_file_pos: 0,
+            settings: Settings::default(),
         }
     }
 }
 
 struct ManagedState(Arc<Mutex<AppState>>);
 
-fn get_log_dir() -> PathBuf {
+fn get_config_dir() -> PathBuf {
     dirs::home_dir()
         .unwrap_or_default()
         .join(".claude-monitor")
-        .join("logs")
+}
+
+fn get_log_dir() -> PathBuf {
+    get_config_dir().join("logs")
 }
 
 fn get_events_file() -> PathBuf {
     get_log_dir().join("events.jsonl")
+}
+
+fn get_settings_file() -> PathBuf {
+    get_config_dir().join("settings.json")
+}
+
+fn load_settings() -> Settings {
+    let settings_file = get_settings_file();
+    if settings_file.exists() {
+        if let Ok(content) = fs::read_to_string(&settings_file) {
+            if let Ok(settings) = serde_json::from_str(&content) {
+                return settings;
+            }
+        }
+    }
+    Settings::default()
+}
+
+fn save_settings(settings: &Settings) {
+    let settings_file = get_settings_file();
+    if let Ok(content) = serde_json::to_string_pretty(settings) {
+        let _ = fs::create_dir_all(get_config_dir());
+        let _ = fs::write(settings_file, content);
+    }
 }
 
 fn process_event(state: &mut AppState, event: EventInfo) {
@@ -245,7 +292,7 @@ fn read_new_events(state: &mut AppState) -> Vec<EventInfo> {
     new_events
 }
 
-fn build_menu<R: Runtime>(app: &tauri::AppHandle<R>, state: &AppState) -> tauri::Result<Menu<R>> {
+fn build_menu<R: Runtime>(app: &tauri::AppHandle<R>, state: &AppState) -> tauri::Result<(Menu<R>, CheckMenuItem<R>)> {
     let waiting_count = state
         .sessions
         .values()
@@ -269,6 +316,10 @@ fn build_menu<R: Runtime>(app: &tauri::AppHandle<R>, state: &AppState) -> tauri:
     let sep1 = PredefinedMenuItem::separator(app)?;
 
     let open_dashboard = MenuItemBuilder::with_id("open_dashboard", "Open Dashboard")
+        .build(app)?;
+
+    let always_on_top = CheckMenuItemBuilder::with_id("always_on_top", "Always on Top")
+        .checked(state.settings.always_on_top)
         .build(app)?;
 
     let sep_dashboard = PredefinedMenuItem::separator(app)?;
@@ -325,7 +376,7 @@ fn build_menu<R: Runtime>(app: &tauri::AppHandle<R>, state: &AppState) -> tauri:
         .accelerator("CmdOrCtrl+Q")
         .build(app)?;
 
-    let menu = Menu::with_items(app, &[&header, &sep1, &open_dashboard, &sep_dashboard])?;
+    let menu = Menu::with_items(app, &[&header, &sep1, &open_dashboard, &always_on_top, &sep_dashboard])?;
 
     for item in &session_items {
         menu.append(item)?;
@@ -345,13 +396,13 @@ fn build_menu<R: Runtime>(app: &tauri::AppHandle<R>, state: &AppState) -> tauri:
     menu.append(&sep2)?;
     menu.append(&quit)?;
 
-    Ok(menu)
+    Ok((menu, always_on_top))
 }
 
 fn update_tray_and_badge<R: Runtime>(app: &tauri::AppHandle<R>, state: &AppState) {
     // Update tray menu
     if let Some(tray) = app.tray_by_id("main") {
-        if let Ok(new_menu) = build_menu(app, state) {
+        if let Ok((new_menu, _)) = build_menu(app, state) {
             let _ = tray.set_menu(Some(new_menu));
         }
 
@@ -392,6 +443,15 @@ fn show_dashboard<R: Runtime>(app: &tauri::AppHandle<R>) {
     }
 }
 
+fn toggle_always_on_top<R: Runtime>(app: &tauri::AppHandle<R>, state: &mut AppState) {
+    state.settings.always_on_top = !state.settings.always_on_top;
+    save_settings(&state.settings);
+
+    if let Some(window) = app.get_webview_window("dashboard") {
+        let _ = window.set_always_on_top(state.settings.always_on_top);
+    }
+}
+
 #[tauri::command]
 fn get_dashboard_data(state: tauri::State<'_, ManagedState>) -> DashboardData {
     let state_guard = state.0.lock().unwrap();
@@ -414,8 +474,33 @@ fn clear_all_sessions(state: tauri::State<'_, ManagedState>, app: tauri::AppHand
     emit_state_update(&app, &state_guard);
 }
 
+#[tauri::command]
+fn get_always_on_top(state: tauri::State<'_, ManagedState>) -> bool {
+    let state_guard = state.0.lock().unwrap();
+    state_guard.settings.always_on_top
+}
+
+#[tauri::command]
+fn set_always_on_top(enabled: bool, state: tauri::State<'_, ManagedState>, app: tauri::AppHandle) {
+    let mut state_guard = state.0.lock().unwrap();
+    state_guard.settings.always_on_top = enabled;
+    save_settings(&state_guard.settings);
+
+    if let Some(window) = app.get_webview_window("dashboard") {
+        let _ = window.set_always_on_top(enabled);
+    }
+
+    update_tray_and_badge(&app, &state_guard);
+}
+
 fn main() {
     let state = Arc::new(Mutex::new(AppState::default()));
+
+    // Load settings
+    {
+        let mut state_guard = state.lock().unwrap();
+        state_guard.settings = load_settings();
+    }
 
     // Load existing events
     {
@@ -443,12 +528,24 @@ fn main() {
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
         .manage(ManagedState(state_for_managed))
-        .invoke_handler(tauri::generate_handler![get_dashboard_data, remove_session, clear_all_sessions])
+        .invoke_handler(tauri::generate_handler![
+            get_dashboard_data,
+            remove_session,
+            clear_all_sessions,
+            get_always_on_top,
+            set_always_on_top
+        ])
         .setup(move |app| {
             let app_handle = app.handle().clone();
             let state_for_tray = Arc::clone(&state_clone);
 
-            // Create dashboard window (hidden initially)
+            // Get initial always_on_top setting
+            let always_on_top = {
+                let state_guard = state_for_tray.lock().unwrap();
+                state_guard.settings.always_on_top
+            };
+
+            // Create dashboard window (hidden initially, with always_on_top setting)
             let dashboard_window = if let Ok(icon) = Image::from_bytes(ICON_NORMAL) {
                 WebviewWindowBuilder::new(
                     app,
@@ -460,6 +557,7 @@ fn main() {
                 .min_inner_size(600.0, 400.0)
                 .center()
                 .visible(false)
+                .always_on_top(always_on_top)
                 .icon(icon)?
                 .build()?
             } else {
@@ -473,6 +571,7 @@ fn main() {
                 .min_inner_size(600.0, 400.0)
                 .center()
                 .visible(false)
+                .always_on_top(always_on_top)
                 .build()?
             };
 
@@ -497,7 +596,7 @@ fn main() {
             });
 
             // Build initial menu
-            let menu = {
+            let (menu, _) = {
                 let state_guard = state_for_tray.lock().unwrap();
                 build_menu(&app_handle, &state_guard)?
             };
@@ -517,6 +616,11 @@ fn main() {
                         }
                         "open_dashboard" => {
                             show_dashboard(app);
+                        }
+                        "always_on_top" => {
+                            let mut state_guard = state_for_tray.lock().unwrap();
+                            toggle_always_on_top(app, &mut state_guard);
+                            update_tray_and_badge(app, &state_guard);
                         }
                         "open_logs" => {
                             let log_dir = get_log_dir();
