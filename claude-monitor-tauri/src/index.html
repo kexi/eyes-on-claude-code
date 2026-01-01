@@ -313,21 +313,31 @@
         }
 
         body.mini-view .container {
-            padding: 12px;
+            padding: 10px;
+            overflow: hidden;
         }
 
         body.mini-view header {
-            padding: 8px 0;
-            margin-bottom: 12px;
+            padding: 6px 0;
+            margin-bottom: 10px;
+            flex-wrap: nowrap;
         }
 
         body.mini-view .logo h1 {
-            font-size: 1rem;
+            font-size: 0.875rem;
+            white-space: nowrap;
         }
 
         body.mini-view .status-badge {
-            padding: 4px 10px;
-            font-size: 0.75rem;
+            padding: 3px 8px;
+            font-size: 0.625rem;
+            white-space: nowrap;
+            flex-shrink: 0;
+        }
+
+        body.mini-view .status-dot {
+            width: 8px;
+            height: 8px;
         }
 
         body.mini-view .stats-grid {
@@ -335,59 +345,71 @@
         }
 
         body.mini-view .section {
-            margin-bottom: 12px;
+            margin-bottom: 10px;
         }
 
         body.mini-view .section-header {
-            margin-bottom: 8px;
+            margin-bottom: 6px;
         }
 
         body.mini-view .section-title {
-            font-size: 0.875rem;
+            font-size: 0.75rem;
+        }
+
+        body.mini-view .session-list {
+            gap: 8px;
         }
 
         body.mini-view .session-card {
-            padding: 10px 12px;
-            gap: 10px;
+            padding: 8px 10px;
+            gap: 8px;
+            flex-wrap: wrap;
         }
 
         body.mini-view .session-icon {
             font-size: 1rem;
-            width: 28px;
+            width: 24px;
+            flex-shrink: 0;
+        }
+
+        body.mini-view .session-info {
+            flex: 1;
+            min-width: 0;
+            overflow: hidden;
         }
 
         body.mini-view .session-name {
-            font-size: 0.875rem;
+            font-size: 0.75rem;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
         }
 
         body.mini-view .session-path {
-            font-size: 0.625rem;
+            font-size: 0.5rem;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
         }
 
         body.mini-view .session-waiting-for {
-            font-size: 0.625rem;
-            padding: 2px 6px;
+            font-size: 0.5rem;
+            padding: 2px 4px;
             margin-top: 2px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            max-width: 100%;
+            display: block;
         }
 
-        body.mini-view .session-status-text {
-            font-size: 0.75rem;
-        }
-
-        body.mini-view .session-time {
-            font-size: 0.625rem;
-        }
-
-        body.mini-view .remove-btn {
-            width: 22px;
-            height: 22px;
-            font-size: 0.75rem;
-            margin-left: 8px;
+        body.mini-view .session-actions {
+            display: none;
         }
 
         body.mini-view .refresh-btn {
-            padding: 4px 10px;
-            font-size: 0.75rem;
+            padding: 3px 8px;
+            font-size: 0.625rem;
         }
 
         body.mini-view .events-list {
@@ -399,16 +421,16 @@
         }
 
         body.mini-view .empty-state {
-            padding: 20px;
+            padding: 16px;
         }
 
         body.mini-view .empty-state-icon {
-            font-size: 2rem;
-            margin-bottom: 8px;
+            font-size: 1.5rem;
+            margin-bottom: 6px;
         }
 
         body.mini-view .empty-state p {
-            font-size: 0.75rem;
+            font-size: 0.625rem;
         }
 
         /* Mini view cursor for dragging */
@@ -482,7 +504,12 @@
     <script>
         const { invoke } = window.__TAURI__.core;
         const { listen } = window.__TAURI__.event;
-        const { getCurrentWindow } = window.__TAURI__.window;
+
+        // Get window API safely - might not be available in all contexts
+        let appWindow = null;
+        if (window.__TAURI__ && window.__TAURI__.window) {
+            appWindow = window.__TAURI__.window.getCurrentWindow();
+        }
 
         function getStatusEmoji(status) {
             switch (status) {
@@ -700,9 +727,9 @@
                 }
 
                 // Only left mouse button
-                if (e.buttons === 1) {
+                if (e.buttons === 1 && appWindow) {
                     try {
-                        await getCurrentWindow().startDragging();
+                        await appWindow.startDragging();
                     } catch (error) {
                         console.error('Failed to start dragging:', error);
                     }
