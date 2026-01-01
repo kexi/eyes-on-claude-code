@@ -1,13 +1,10 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-use ab_glyph::{FontRef, PxScale};
-use image::{Rgba, RgbaImage};
-use imageproc::drawing::{draw_filled_circle_mut, draw_text_mut};
 use notify::{Config, RecommendedWatcher, RecursiveMode, Watcher};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs::{self, File};
-use std::io::{BufRead, BufReader, Cursor, Seek, SeekFrom};
+use std::io::{BufRead, BufReader, Seek, SeekFrom};
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use tauri::{
@@ -18,57 +15,6 @@ use tauri::{
 };
 
 const ICON_NORMAL: &[u8] = include_bytes!("../icons/icon.png");
-const FONT_DATA: &[u8] = include_bytes!("../fonts/Roboto-Bold.ttf");
-
-// Generate icon with badge showing count
-fn generate_badge_icon(count: usize) -> Vec<u8> {
-    // Load base icon
-    let img = image::load_from_memory(ICON_NORMAL).expect("Failed to load icon");
-    let mut img: RgbaImage = img.to_rgba8();
-    let (width, _height) = img.dimensions();
-
-    // Badge settings
-    let badge_radius = (width as f32 * 0.28) as i32;
-    let badge_center_x = width as i32 - badge_radius - 1;
-    let badge_center_y = badge_radius + 1;
-    let badge_color = Rgba([230u8, 69u8, 96u8, 255u8]); // Red/pink color
-
-    // Draw badge circle
-    draw_filled_circle_mut(
-        &mut img,
-        (badge_center_x, badge_center_y),
-        badge_radius,
-        badge_color,
-    );
-
-    // Draw count text
-    let font = FontRef::try_from_slice(FONT_DATA).expect("Failed to load font");
-    let count_str = if count > 9 { "9+".to_string() } else { count.to_string() };
-    let scale = PxScale::from(badge_radius as f32 * 1.5);
-    let text_color = Rgba([255u8, 255u8, 255u8, 255u8]); // White
-
-    // Calculate text position (center in badge)
-    let text_offset_x = if count > 9 { badge_radius as f32 * 0.7 } else { badge_radius as f32 * 0.45 };
-    let text_x = badge_center_x as f32 - text_offset_x;
-    let text_y = badge_center_y as f32 - badge_radius as f32 * 0.55;
-
-    draw_text_mut(
-        &mut img,
-        text_color,
-        text_x as i32,
-        text_y as i32,
-        scale,
-        &font,
-        &count_str,
-    );
-
-    // Convert to PNG bytes
-    let mut bytes: Vec<u8> = Vec::new();
-    let mut cursor = Cursor::new(&mut bytes);
-    img.write_to(&mut cursor, image::ImageFormat::Png)
-        .expect("Failed to write image");
-    bytes
-}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct EventInfo {
@@ -91,7 +37,7 @@ struct SessionInfo {
     status: SessionStatus,
     last_event: String,
     #[serde(default)]
-    waiting_for: String,  // Tool name or message when waiting
+    waiting_for: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -126,12 +72,6 @@ struct AppState {
 }
 
 impl AppState {
-    fn has_waiting_sessions(&self) -> bool {
-        self.sessions.values().any(|s| {
-            s.status == SessionStatus::WaitingPermission || s.status == SessionStatus::WaitingInput
-        })
-    }
-
     fn waiting_session_count(&self) -> usize {
         self.sessions
             .values()
@@ -159,7 +99,6 @@ impl Default for AppState {
     }
 }
 
-// Wrapper for thread-safe state management
 struct ManagedState(Arc<Mutex<AppState>>);
 
 fn get_log_dir() -> PathBuf {
@@ -207,7 +146,6 @@ fn process_event(state: &mut AppState, event: EventInfo) {
                 "idle_prompt" => SessionStatus::WaitingInput,
                 _ => SessionStatus::Active,
             };
-            // Use message if available, otherwise use tool_name
             let waiting_info = if !event.message.is_empty() {
                 event.message.clone()
             } else if !event.tool_name.is_empty() {
@@ -247,7 +185,6 @@ fn process_event(state: &mut AppState, event: EventInfo) {
                 });
         }
         "post_tool_use" => {
-            // After a tool is used, the session is active again
             state.sessions
                 .entry(key)
                 .and_modify(|s| {
@@ -264,7 +201,6 @@ fn process_event(state: &mut AppState, event: EventInfo) {
                 });
         }
         _ => {
-            // For unknown events, only update if session exists (don't auto-create)
             if let Some(session) = state.sessions.get_mut(&key) {
                 session.last_event = event.timestamp;
             }
@@ -318,7 +254,6 @@ fn build_menu<R: Runtime>(app: &tauri::AppHandle<R>, state: &AppState) -> tauri:
         })
         .count();
 
-    // Header
     let header_text = if waiting_count > 0 {
         format!("⚠️ {} session(s) waiting", waiting_count)
     } else if state.sessions.is_empty() {
@@ -333,13 +268,11 @@ fn build_menu<R: Runtime>(app: &tauri::AppHandle<R>, state: &AppState) -> tauri:
 
     let sep1 = PredefinedMenuItem::separator(app)?;
 
-    // Open Dashboard
     let open_dashboard = MenuItemBuilder::with_id("open_dashboard", "Open Dashboard")
         .build(app)?;
 
     let sep_dashboard = PredefinedMenuItem::separator(app)?;
 
-    // Sessions section
     let mut session_items = Vec::new();
     if !state.sessions.is_empty() {
         let sessions_header = MenuItemBuilder::with_id("sessions_header", "Sessions")
@@ -357,7 +290,6 @@ fn build_menu<R: Runtime>(app: &tauri::AppHandle<R>, state: &AppState) -> tauri:
         }
     }
 
-    // Recent events submenu
     let events_submenu = if !state.recent_events.is_empty() {
         let mut submenu_builder = SubmenuBuilder::new(app, "Recent Events");
         for (idx, event) in state.recent_events.iter().rev().take(10).enumerate() {
@@ -383,7 +315,6 @@ fn build_menu<R: Runtime>(app: &tauri::AppHandle<R>, state: &AppState) -> tauri:
         None
     };
 
-    // Actions
     let open_logs = MenuItemBuilder::with_id("open_logs", "Open Log Folder")
         .build(app)?;
     let clear_sessions = MenuItemBuilder::with_id("clear_sessions", "Clear Sessions")
@@ -394,7 +325,6 @@ fn build_menu<R: Runtime>(app: &tauri::AppHandle<R>, state: &AppState) -> tauri:
         .accelerator("CmdOrCtrl+Q")
         .build(app)?;
 
-    // Build menu
     let menu = Menu::with_items(app, &[&header, &sep1, &open_dashboard, &sep_dashboard])?;
 
     for item in &session_items {
@@ -418,27 +348,14 @@ fn build_menu<R: Runtime>(app: &tauri::AppHandle<R>, state: &AppState) -> tauri:
     Ok(menu)
 }
 
-fn update_tray<R: Runtime>(app: &tauri::AppHandle<R>, state: &AppState) {
+fn update_tray_and_badge<R: Runtime>(app: &tauri::AppHandle<R>, state: &AppState) {
+    // Update tray menu
     if let Some(tray) = app.tray_by_id("main") {
-        // Update menu
         if let Ok(new_menu) = build_menu(app, state) {
             let _ = tray.set_menu(Some(new_menu));
         }
 
-        // Count waiting sessions
         let waiting_count = state.waiting_session_count();
-
-        // Update icon based on state
-        let icon_bytes: Vec<u8> = if waiting_count > 0 {
-            // Generate badge icon with count
-            generate_badge_icon(waiting_count)
-        } else {
-            ICON_NORMAL.to_vec()
-        };
-
-        if let Ok(icon) = Image::from_bytes(&icon_bytes) {
-            let _ = tray.set_icon(Some(icon));
-        }
 
         // Update tooltip
         let tooltip = if waiting_count > 0 {
@@ -450,6 +367,17 @@ fn update_tray<R: Runtime>(app: &tauri::AppHandle<R>, state: &AppState) {
         };
         let _ = tray.set_tooltip(Some(tooltip));
     }
+
+    // Update badge count using the dashboard window
+    if let Some(window) = app.get_webview_window("dashboard") {
+        let waiting_count = state.waiting_session_count();
+        let badge_count = if waiting_count > 0 {
+            Some(waiting_count as i64)
+        } else {
+            None
+        };
+        let _ = window.set_badge_count(badge_count);
+    }
 }
 
 fn emit_state_update<R: Runtime>(app: &tauri::AppHandle<R>, state: &AppState) {
@@ -457,64 +385,32 @@ fn emit_state_update<R: Runtime>(app: &tauri::AppHandle<R>, state: &AppState) {
     let _ = app.emit("state-updated", &data);
 }
 
-fn open_dashboard<R: Runtime>(app: &tauri::AppHandle<R>) {
-    // Check if window already exists
+fn show_dashboard<R: Runtime>(app: &tauri::AppHandle<R>) {
     if let Some(window) = app.get_webview_window("dashboard") {
         let _ = window.show();
         let _ = window.set_focus();
-        return;
-    }
-
-    // Create new window with icon
-    if let Ok(icon) = Image::from_bytes(ICON_NORMAL) {
-        if let Ok(builder) = WebviewWindowBuilder::new(
-            app,
-            "dashboard",
-            WebviewUrl::App("index.html".into()),
-        )
-        .title("Claude Monitor - Dashboard")
-        .inner_size(900.0, 700.0)
-        .min_inner_size(600.0, 400.0)
-        .center()
-        .icon(icon) {
-            let _ = builder.build();
-        }
-    } else {
-        let _ = WebviewWindowBuilder::new(
-            app,
-            "dashboard",
-            WebviewUrl::App("index.html".into()),
-        )
-        .title("Claude Monitor - Dashboard")
-        .inner_size(900.0, 700.0)
-        .min_inner_size(600.0, 400.0)
-        .center()
-        .build();
     }
 }
 
-// Tauri command to get dashboard data
 #[tauri::command]
 fn get_dashboard_data(state: tauri::State<'_, ManagedState>) -> DashboardData {
     let state_guard = state.0.lock().unwrap();
     state_guard.to_dashboard_data()
 }
 
-// Tauri command to remove a single session
 #[tauri::command]
 fn remove_session(project_dir: String, state: tauri::State<'_, ManagedState>, app: tauri::AppHandle) {
     let mut state_guard = state.0.lock().unwrap();
     state_guard.sessions.remove(&project_dir);
-    update_tray(&app, &state_guard);
+    update_tray_and_badge(&app, &state_guard);
     emit_state_update(&app, &state_guard);
 }
 
-// Tauri command to clear all sessions
 #[tauri::command]
 fn clear_all_sessions(state: tauri::State<'_, ManagedState>, app: tauri::AppHandle) {
     let mut state_guard = state.0.lock().unwrap();
     state_guard.sessions.clear();
-    update_tray(&app, &state_guard);
+    update_tray_and_badge(&app, &state_guard);
     emit_state_update(&app, &state_guard);
 }
 
@@ -552,23 +448,61 @@ fn main() {
             let app_handle = app.handle().clone();
             let state_for_tray = Arc::clone(&state_clone);
 
+            // Create dashboard window (hidden initially)
+            let dashboard_window = if let Ok(icon) = Image::from_bytes(ICON_NORMAL) {
+                WebviewWindowBuilder::new(
+                    app,
+                    "dashboard",
+                    WebviewUrl::App("index.html".into()),
+                )
+                .title("Claude Monitor - Dashboard")
+                .inner_size(900.0, 700.0)
+                .min_inner_size(600.0, 400.0)
+                .center()
+                .visible(false)
+                .icon(icon)?
+                .build()?
+            } else {
+                WebviewWindowBuilder::new(
+                    app,
+                    "dashboard",
+                    WebviewUrl::App("index.html".into()),
+                )
+                .title("Claude Monitor - Dashboard")
+                .inner_size(900.0, 700.0)
+                .min_inner_size(600.0, 400.0)
+                .center()
+                .visible(false)
+                .build()?
+            };
+
+            // Set initial badge count
+            {
+                let state_guard = state_for_tray.lock().unwrap();
+                let waiting_count = state_guard.waiting_session_count();
+                if waiting_count > 0 {
+                    let _ = dashboard_window.set_badge_count(Some(waiting_count as i64));
+                }
+            }
+
+            // Hide window when close button is clicked instead of destroying it
+            let app_handle_for_close = app_handle.clone();
+            dashboard_window.on_window_event(move |event| {
+                if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                    api.prevent_close();
+                    if let Some(window) = app_handle_for_close.get_webview_window("dashboard") {
+                        let _ = window.hide();
+                    }
+                }
+            });
+
             // Build initial menu
             let menu = {
                 let state_guard = state_for_tray.lock().unwrap();
                 build_menu(&app_handle, &state_guard)?
             };
 
-            // Determine initial icon
-            let initial_icon = {
-                let state_guard = state_for_tray.lock().unwrap();
-                let waiting_count = state_guard.waiting_session_count();
-                if waiting_count > 0 {
-                    let badge_bytes = generate_badge_icon(waiting_count);
-                    Image::from_bytes(&badge_bytes)?
-                } else {
-                    Image::from_bytes(ICON_NORMAL)?
-                }
-            };
+            let initial_icon = Image::from_bytes(ICON_NORMAL)?;
 
             // Create tray icon
             let _tray = TrayIconBuilder::with_id("main")
@@ -582,7 +516,7 @@ fn main() {
                             app.exit(0);
                         }
                         "open_dashboard" => {
-                            open_dashboard(app);
+                            show_dashboard(app);
                         }
                         "open_logs" => {
                             let log_dir = get_log_dir();
@@ -591,7 +525,7 @@ fn main() {
                         "clear_sessions" => {
                             let mut state_guard = state_for_tray.lock().unwrap();
                             state_guard.sessions.clear();
-                            update_tray(app, &state_guard);
+                            update_tray_and_badge(app, &state_guard);
                             emit_state_update(app, &state_guard);
                         }
                         _ => {}
@@ -633,7 +567,7 @@ fn main() {
                             let new_events = read_new_events(&mut state_guard);
 
                             if !new_events.is_empty() {
-                                update_tray(&app_handle_for_watcher, &state_guard);
+                                update_tray_and_badge(&app_handle_for_watcher, &state_guard);
                                 emit_state_update(&app_handle_for_watcher, &state_guard);
                             }
                         }
