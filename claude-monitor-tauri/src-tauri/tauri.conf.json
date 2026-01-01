@@ -10,7 +10,8 @@
   },
   "app": {
     "withGlobalTauri": true,
-    "windows": []
+    "windows": [],
+    "macOSPrivateApi": true
   },
   "bundle": {
     "active": true,

@@ -6,9 +6,9 @@
     <title>Claude Monitor</title>
     <style>
         :root {
-            --bg-primary: #1a1a2e;
-            --bg-secondary: #16213e;
-            --bg-card: #0f3460;
+            --bg-primary: rgba(26, 26, 46, 0.85);
+            --bg-secondary: rgba(22, 33, 62, 0.9);
+            --bg-card: rgba(15, 52, 96, 0.9);
             --text-primary: #eaeaea;
             --text-secondary: #a0a0a0;
             --accent: #e94560;
@@ -23,14 +23,23 @@
             box-sizing: border-box;
         }
 
+        html {
+            background: transparent !important;
+        }
+
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
-            background: var(--bg-primary);
+            /* background removed - opacity is controlled via body.style.opacity */
             color: var(--text-primary);
             min-height: 100vh;
+            border-radius: 12px;
+            overflow: hidden;
         }
 
         .container {
+            background: var(--bg-primary);
+            min-height: 100vh;
+            border-radius: 12px;
             max-width: 900px;
             margin: 0 auto;
             padding: 20px;
@@ -280,7 +289,7 @@
         }
 
         .remove-btn {
-            background: transparent;
+            background: transparent !important;
             border: 1px solid var(--text-secondary);
             color: var(--text-secondary);
             width: 28px;
@@ -688,6 +697,15 @@
         listen('settings-updated', (event) => {
             const settings = event.payload;
             applyMiniView(settings.mini_view);
+
+            // Update opacity settings
+            if (settings.opacity_active !== undefined) {
+                opacitySettings.active = settings.opacity_active;
+            }
+            if (settings.opacity_inactive !== undefined) {
+                opacitySettings.inactive = settings.opacity_inactive;
+            }
+            applyOpacity(document.hasFocus());
         });
 
         function applyMiniView(enabled) {
@@ -702,6 +720,11 @@
             try {
                 const settings = await invoke('get_settings');
                 applyMiniView(settings.mini_view);
+
+                // Load opacity settings
+                opacitySettings.active = settings.opacity_active || 1.0;
+                opacitySettings.inactive = settings.opacity_inactive || 0.3;
+                applyOpacity(document.hasFocus());
             } catch (error) {
                 console.error('Failed to load settings:', error);
             }
@@ -737,9 +760,41 @@
             });
         }
 
+        // Opacity settings cache
+        let opacitySettings = {
+            active: 1.0,
+            inactive: 0.3
+        };
+
+        // Apply opacity to entire window (including text and icons)
+        function applyOpacity(focused) {
+            const opacity = focused ? opacitySettings.active : opacitySettings.inactive;
+            document.body.style.setProperty('opacity', opacity, 'important');
+        }
+
+        // Setup opacity based on window focus
+        async function setupOpacityHandlers() {
+            // Use Tauri event system for window focus/blur
+            await listen('tauri://focus', () => applyOpacity(true));
+            await listen('tauri://blur', () => applyOpacity(false));
+
+            // Apply initial opacity based on current focus state
+            if (appWindow) {
+                try {
+                    const focused = await appWindow.isFocused();
+                    applyOpacity(focused);
+                } catch (e) {
+                    applyOpacity(true);
+                }
+            } else {
+                applyOpacity(document.hasFocus());
+            }
+        }
+
         // Initial load
         document.addEventListener('DOMContentLoaded', () => {
             setupDragForMiniView();
+            setupOpacityHandlers();
             loadSettings();
             refreshData();
             // Auto-refresh every 5 seconds as backup

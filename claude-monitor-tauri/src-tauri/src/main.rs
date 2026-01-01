@@ -11,6 +11,7 @@ use tauri::{
     image::Image,
     menu::{CheckMenuItem, CheckMenuItemBuilder, Menu, MenuItemBuilder, PredefinedMenuItem, SubmenuBuilder},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
+    webview::Color,
     Emitter, Manager, Runtime, WebviewUrl, WebviewWindowBuilder,
 };
 
@@ -71,6 +72,10 @@ struct Settings {
     always_on_top: bool,
     #[serde(default = "default_mini_view")]
     mini_view: bool,
+    #[serde(default = "default_opacity_active")]
+    opacity_active: f64,
+    #[serde(default = "default_opacity_inactive")]
+    opacity_inactive: f64,
 }
 
 fn default_always_on_top() -> bool {
@@ -81,11 +86,21 @@ fn default_mini_view() -> bool {
     true
 }
 
+fn default_opacity_active() -> f64 {
+    1.0 // 100%
+}
+
+fn default_opacity_inactive() -> f64 {
+    0.3 // 30%
+}
+
 impl Default for Settings {
     fn default() -> Self {
         Self {
             always_on_top: true,
             mini_view: true,
+            opacity_active: 1.0,
+            opacity_inactive: 0.3,
         }
     }
 }
@@ -338,6 +353,25 @@ fn build_menu<R: Runtime>(app: &tauri::AppHandle<R>, state: &AppState) -> tauri:
         .checked(state.settings.mini_view)
         .build(app)?;
 
+    // Opacity submenu
+    let opacity_inactive_label = format!("Inactive: {}%", (state.settings.opacity_inactive * 100.0) as i32);
+    let opacity_active_label = format!("Active: {}%", (state.settings.opacity_active * 100.0) as i32);
+
+    let opacity_submenu = SubmenuBuilder::new(app, "Opacity")
+        .item(&MenuItemBuilder::with_id("opacity_inactive_header", &opacity_inactive_label).enabled(false).build(app)?)
+        .item(&MenuItemBuilder::with_id("opacity_inactive_10", "  10%").build(app)?)
+        .item(&MenuItemBuilder::with_id("opacity_inactive_30", "  30%").build(app)?)
+        .item(&MenuItemBuilder::with_id("opacity_inactive_50", "  50%").build(app)?)
+        .item(&MenuItemBuilder::with_id("opacity_inactive_70", "  70%").build(app)?)
+        .item(&MenuItemBuilder::with_id("opacity_inactive_100", "  100%").build(app)?)
+        .separator()
+        .item(&MenuItemBuilder::with_id("opacity_active_header", &opacity_active_label).enabled(false).build(app)?)
+        .item(&MenuItemBuilder::with_id("opacity_active_70", "  70%").build(app)?)
+        .item(&MenuItemBuilder::with_id("opacity_active_80", "  80%").build(app)?)
+        .item(&MenuItemBuilder::with_id("opacity_active_90", "  90%").build(app)?)
+        .item(&MenuItemBuilder::with_id("opacity_active_100", "  100%").build(app)?)
+        .build()?;
+
     let sep_dashboard = PredefinedMenuItem::separator(app)?;
 
     let mut session_items = Vec::new();
@@ -392,7 +426,7 @@ fn build_menu<R: Runtime>(app: &tauri::AppHandle<R>, state: &AppState) -> tauri:
         .accelerator("CmdOrCtrl+Q")
         .build(app)?;
 
-    let menu = Menu::with_items(app, &[&header, &sep1, &open_dashboard, &always_on_top, &mini_view, &sep_dashboard])?;
+    let menu = Menu::with_items(app, &[&header, &sep1, &open_dashboard, &always_on_top, &mini_view, &opacity_submenu, &sep_dashboard])?;
 
     for item in &session_items {
         menu.append(item)?;
@@ -558,6 +592,20 @@ fn get_settings(state: tauri::State<'_, ManagedState>) -> Settings {
     state_guard.settings.clone()
 }
 
+#[tauri::command]
+fn set_opacity_active(opacity: f64, state: tauri::State<'_, ManagedState>) {
+    let mut state_guard = state.0.lock().unwrap();
+    state_guard.settings.opacity_active = opacity.clamp(0.1, 1.0);
+    save_settings(&state_guard.settings);
+}
+
+#[tauri::command]
+fn set_opacity_inactive(opacity: f64, state: tauri::State<'_, ManagedState>) {
+    let mut state_guard = state.0.lock().unwrap();
+    state_guard.settings.opacity_inactive = opacity.clamp(0.1, 1.0);
+    save_settings(&state_guard.settings);
+}
+
 fn main() {
     let state = Arc::new(Mutex::new(AppState::default()));
 
@@ -601,7 +649,9 @@ fn main() {
             set_always_on_top,
             get_mini_view,
             set_mini_view,
-            get_settings
+            get_settings,
+            set_opacity_active,
+            set_opacity_inactive
         ])
         .setup(move |app| {
             let app_handle = app.handle().clone();
@@ -621,6 +671,9 @@ fn main() {
             };
 
             // Create dashboard window (hidden initially, with settings applied)
+            // Use transparent background color (RGBA with alpha = 0)
+            let transparent_color = Color(0, 0, 0, 0);
+
             let dashboard_window = if let Ok(icon) = Image::from_bytes(ICON_NORMAL) {
                 WebviewWindowBuilder::new(
                     app,
@@ -634,6 +687,8 @@ fn main() {
                 .visible(false)
                 .always_on_top(always_on_top)
                 .decorations(!mini_view)
+                .transparent(true)
+                .background_color(transparent_color)
                 .icon(icon)?
                 .build()?
             } else {
@@ -649,6 +704,8 @@ fn main() {
                 .visible(false)
                 .always_on_top(always_on_top)
                 .decorations(!mini_view)
+                .transparent(true)
+                .background_color(transparent_color)
                 .build()?
             };
 
@@ -713,6 +770,71 @@ fn main() {
                             state_guard.sessions.clear();
                             update_tray_and_badge(app, &state_guard);
                             emit_state_update(app, &state_guard);
+                        }
+                        // Opacity inactive settings
+                        "opacity_inactive_10" => {
+                            let mut state_guard = state_for_tray.lock().unwrap();
+                            state_guard.settings.opacity_inactive = 0.1;
+                            save_settings(&state_guard.settings);
+                            let _ = app.emit("settings-updated", &state_guard.settings);
+                            update_tray_and_badge(app, &state_guard);
+                        }
+                        "opacity_inactive_30" => {
+                            let mut state_guard = state_for_tray.lock().unwrap();
+                            state_guard.settings.opacity_inactive = 0.3;
+                            save_settings(&state_guard.settings);
+                            let _ = app.emit("settings-updated", &state_guard.settings);
+                            update_tray_and_badge(app, &state_guard);
+                        }
+                        "opacity_inactive_50" => {
+                            let mut state_guard = state_for_tray.lock().unwrap();
+                            state_guard.settings.opacity_inactive = 0.5;
+                            save_settings(&state_guard.settings);
+                            let _ = app.emit("settings-updated", &state_guard.settings);
+                            update_tray_and_badge(app, &state_guard);
+                        }
+                        "opacity_inactive_70" => {
+                            let mut state_guard = state_for_tray.lock().unwrap();
+                            state_guard.settings.opacity_inactive = 0.7;
+                            save_settings(&state_guard.settings);
+                            let _ = app.emit("settings-updated", &state_guard.settings);
+                            update_tray_and_badge(app, &state_guard);
+                        }
+                        "opacity_inactive_100" => {
+                            let mut state_guard = state_for_tray.lock().unwrap();
+                            state_guard.settings.opacity_inactive = 1.0;
+                            save_settings(&state_guard.settings);
+                            let _ = app.emit("settings-updated", &state_guard.settings);
+                            update_tray_and_badge(app, &state_guard);
+                        }
+                        // Opacity active settings
+                        "opacity_active_70" => {
+                            let mut state_guard = state_for_tray.lock().unwrap();
+                            state_guard.settings.opacity_active = 0.7;
+                            save_settings(&state_guard.settings);
+                            let _ = app.emit("settings-updated", &state_guard.settings);
+                            update_tray_and_badge(app, &state_guard);
+                        }
+                        "opacity_active_80" => {
+                            let mut state_guard = state_for_tray.lock().unwrap();
+                            state_guard.settings.opacity_active = 0.8;
+                            save_settings(&state_guard.settings);
+                            let _ = app.emit("settings-updated", &state_guard.settings);
+                            update_tray_and_badge(app, &state_guard);
+                        }
+                        "opacity_active_90" => {
+                            let mut state_guard = state_for_tray.lock().unwrap();
+                            state_guard.settings.opacity_active = 0.9;
+                            save_settings(&state_guard.settings);
+                            let _ = app.emit("settings-updated", &state_guard.settings);
+                            update_tray_and_badge(app, &state_guard);
+                        }
+                        "opacity_active_100" => {
+                            let mut state_guard = state_for_tray.lock().unwrap();
+                            state_guard.settings.opacity_active = 1.0;
+                            save_settings(&state_guard.settings);
+                            let _ = app.emit("settings-updated", &state_guard.settings);
+                            update_tray_and_badge(app, &state_guard);
                         }
                         _ => {}
                     }
