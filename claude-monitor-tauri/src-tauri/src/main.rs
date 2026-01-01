@@ -375,6 +375,24 @@ fn get_dashboard_data(state: tauri::State<'_, ManagedState>) -> DashboardData {
     state_guard.to_dashboard_data()
 }
 
+// Tauri command to remove a single session
+#[tauri::command]
+fn remove_session(project_dir: String, state: tauri::State<'_, ManagedState>, app: tauri::AppHandle) {
+    let mut state_guard = state.0.lock().unwrap();
+    state_guard.sessions.remove(&project_dir);
+    update_tray(&app, &state_guard);
+    emit_state_update(&app, &state_guard);
+}
+
+// Tauri command to clear all sessions
+#[tauri::command]
+fn clear_all_sessions(state: tauri::State<'_, ManagedState>, app: tauri::AppHandle) {
+    let mut state_guard = state.0.lock().unwrap();
+    state_guard.sessions.clear();
+    update_tray(&app, &state_guard);
+    emit_state_update(&app, &state_guard);
+}
+
 fn main() {
     let state = Arc::new(Mutex::new(AppState::default()));
 
@@ -404,7 +422,7 @@ fn main() {
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
         .manage(ManagedState(state_for_managed))
-        .invoke_handler(tauri::generate_handler![get_dashboard_data])
+        .invoke_handler(tauri::generate_handler![get_dashboard_data, remove_session, clear_all_sessions])
         .setup(move |app| {
             let app_handle = app.handle().clone();
             let state_for_tray = Arc::clone(&state_clone);
