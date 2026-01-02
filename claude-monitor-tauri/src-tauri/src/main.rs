@@ -2,7 +2,9 @@
 
 mod commands;
 mod constants;
+mod difit;
 mod events;
+mod git;
 mod menu;
 mod settings;
 mod state;
@@ -19,8 +21,9 @@ use tauri::{
 };
 
 use commands::{
-    clear_all_sessions, get_always_on_top, get_dashboard_data, get_mini_view, get_settings,
-    remove_session, set_always_on_top, set_mini_view, set_opacity_active, set_opacity_inactive,
+    clear_all_sessions, get_always_on_top, get_dashboard_data, get_mini_view, get_repo_git_info,
+    get_settings, open_diff, remove_session, set_always_on_top, set_mini_view, set_opacity_active,
+    set_opacity_inactive,
 };
 use constants::{
     ICON_NORMAL, MINI_VIEW_HEIGHT, MINI_VIEW_WIDTH, NORMAL_VIEW_HEIGHT, NORMAL_VIEW_WIDTH,
@@ -197,7 +200,9 @@ fn main() {
             set_mini_view,
             get_settings,
             set_opacity_active,
-            set_opacity_inactive
+            set_opacity_inactive,
+            get_repo_git_info,
+            open_diff
         ])
         .setup(move |app| {
             let app_handle = app.handle().clone();

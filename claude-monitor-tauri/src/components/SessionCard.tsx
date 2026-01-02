@@ -1,6 +1,7 @@
-import type { SessionInfo } from '@/types';
-import { getStatusEmoji, getStatusClass, getStatusText, formatTime } from '@/lib/utils';
-import { removeSession } from '@/lib/tauri';
+import { useState, useEffect } from 'react';
+import type { SessionInfo, GitInfo } from '@/types';
+import { getStatusEmoji, getStatusClass } from '@/lib/utils';
+import { removeSession, getRepoGitInfo, openDiff, type DiffType } from '@/lib/tauri';
 
 interface SessionCardProps {
   session: SessionInfo;
@@ -8,13 +9,45 @@ interface SessionCardProps {
 }
 
 export const SessionCard = ({ session, isMiniView }: SessionCardProps) => {
+  const [isExpanded, setIsExpanded] = useState(false);
+  const [gitInfo, setGitInfo] = useState<GitInfo | null>(null);
+  const [isLoadingGit, setIsLoadingGit] = useState(false);
+
   const statusClass = getStatusClass(session.status);
 
-  const handleRemove = async () => {
+  const handleRemove = async (e: React.MouseEvent) => {
+    e.stopPropagation();
     try {
       await removeSession(session.project_dir);
     } catch (error) {
       console.error('Failed to remove session:', error);
+    }
+  };
+
+  const handleToggleExpand = () => {
+    if (isMiniView) return;
+    setIsExpanded(!isExpanded);
+  };
+
+  // Load git info when expanded
+  useEffect(() => {
+    if (isExpanded && !gitInfo && !isLoadingGit) {
+      setIsLoadingGit(true);
+      getRepoGitInfo(session.project_dir)
+        .then(setGitInfo)
+        .catch(console.error)
+        .finally(() => setIsLoadingGit(false));
+    }
+  }, [isExpanded, gitInfo, isLoadingGit, session.project_dir]);
+
+  const handleDiffClick = async (type: DiffType) => {
+    try {
+      // For branch diff, we need to determine the base branch
+      // Default to 'main', could also check for 'master'
+      const baseBranch = type === 'branch' ? 'main' : undefined;
+      await openDiff(session.project_dir, type, baseBranch);
+    } catch (error) {
+      console.error('Failed to open diff:', error);
     }
   };
 
@@ -24,61 +57,157 @@ export const SessionCard = ({ session, isMiniView }: SessionCardProps) => {
     active: 'border-l-4 border-success',
   }[statusClass];
 
-  const statusTextColor = {
-    waiting: 'text-warning',
-    completed: 'text-info',
-    active: 'text-success',
-  }[statusClass];
+  if (isMiniView) {
+    return (
+      <div
+        className={`bg-bg-secondary rounded-xl flex items-center transition-all hover:-translate-y-0.5 hover:shadow-lg hover:shadow-black/30 ${borderColor} p-2 gap-2 flex-wrap`}
+      >
+        <div className="text-base w-6 shrink-0 text-center">
+          {getStatusEmoji(session.status)}
+        </div>
+        <div className="flex-1 min-w-0 overflow-hidden">
+          <div className="font-semibold truncate text-xs">{session.project_name}</div>
+          <div className="font-mono text-text-secondary truncate text-[0.5rem]">
+            {session.project_dir}
+          </div>
+          {session.waiting_for && (
+            <div className="text-warning bg-warning/10 rounded inline-block mt-1 truncate max-w-full text-[0.5rem] py-0.5 px-1">
+              ⏸ {session.waiting_for}
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div
-      className={`bg-bg-secondary rounded-xl flex items-center transition-all hover:-translate-y-0.5 hover:shadow-lg hover:shadow-black/30 ${borderColor} ${
-        isMiniView ? 'p-2 gap-2 flex-wrap' : 'p-4 px-5 gap-4'
-      }`}
+      className={`bg-bg-secondary rounded-xl transition-all hover:shadow-lg hover:shadow-black/30 ${borderColor} overflow-hidden`}
     >
-      <div className={`text-center ${isMiniView ? 'text-base w-6 shrink-0' : 'text-2xl w-10'}`}>
-        {getStatusEmoji(session.status)}
-      </div>
+      {/* Header - Always visible */}
+      <div
+        className="flex items-center p-4 px-5 gap-4 cursor-pointer"
+        onClick={handleToggleExpand}
+      >
+        <div className="text-2xl w-10 text-center">{getStatusEmoji(session.status)}</div>
 
-      <div className={`flex-1 min-w-0 overflow-hidden`}>
-        <div className={`font-semibold truncate ${isMiniView ? 'text-xs' : 'mb-1'}`}>
-          {session.project_name}
-        </div>
-        <div
-          className={`font-mono text-text-secondary truncate ${
-            isMiniView ? 'text-[0.5rem]' : 'text-xs'
-          }`}
-        >
-          {session.project_dir}
-        </div>
-        {session.waiting_for && (
-          <div
-            className={`text-warning bg-warning/10 rounded inline-block mt-1 truncate max-w-full ${
-              isMiniView ? 'text-[0.5rem] py-0.5 px-1' : 'text-xs py-1 px-2'
-            }`}
-          >
-            ⏸ {session.waiting_for}
+        <div className="flex-1 min-w-0 overflow-hidden">
+          <div className="font-semibold truncate mb-1">{session.project_name}</div>
+          <div className="font-mono text-text-secondary truncate text-xs">
+            {session.project_dir}
           </div>
-        )}
-      </div>
+          {session.waiting_for && (
+            <div className="text-warning bg-warning/10 rounded inline-block mt-1 truncate max-w-full text-xs py-1 px-2">
+              ⏸ {session.waiting_for}
+            </div>
+          )}
+        </div>
 
-      {!isMiniView && (
-        <div className="flex items-center">
-          <div className="text-right">
-            <div className={`text-sm font-medium ${statusTextColor}`}>
-              {getStatusText(session.status)}
-            </div>
-            <div className="text-xs text-text-secondary mt-0.5">
-              {formatTime(session.last_event)}
-            </div>
-          </div>
+        <div className="flex items-center gap-3">
           <button
             onClick={handleRemove}
-            className="ml-3 w-7 h-7 rounded-md border border-text-secondary text-text-secondary flex items-center justify-center transition-all hover:bg-accent hover:border-accent hover:text-white"
+            className="w-7 h-7 rounded-md border border-text-secondary text-text-secondary flex items-center justify-center transition-all hover:bg-accent hover:border-accent hover:text-white remove-btn"
             title="Remove session"
           >
             ×
           </button>
+          <div
+            className={`w-6 h-6 flex items-center justify-center transition-transform ${
+              isExpanded ? 'rotate-180' : ''
+            }`}
+          >
+            <svg
+              width="12"
+              height="8"
+              viewBox="0 0 12 8"
+              fill="none"
+              className="text-text-secondary"
+            >
+              <path
+                d="M1 1.5L6 6.5L11 1.5"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </svg>
+          </div>
+        </div>
+      </div>
+
+      {/* Expanded content - Git info */}
+      {isExpanded && (
+        <div className="border-t border-bg-card px-5 py-3 space-y-2">
+          {isLoadingGit ? (
+            <div className="text-text-secondary text-sm">Loading git info...</div>
+          ) : gitInfo?.is_git_repo ? (
+            <>
+              {/* Unstaged changes */}
+              <div className="flex items-center justify-between py-1.5">
+                <div className="flex items-center gap-2">
+                  <span className="text-text-secondary text-sm">unstaged changes:</span>
+                  <span
+                    className={`text-sm ${
+                      gitInfo.has_unstaged_changes ? 'text-red-400' : 'text-text-secondary'
+                    }`}
+                  >
+                    {gitInfo.has_unstaged_changes ? 'Changed' : 'No changes'}
+                  </span>
+                </div>
+                {gitInfo.has_unstaged_changes && (
+                  <button
+                    onClick={() => handleDiffClick('unstaged')}
+                    className="flex items-center gap-1.5 px-3 py-1 rounded-md border border-text-secondary/30 text-text-secondary text-xs hover:bg-bg-card transition-colors"
+                  >
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                      <polyline points="14,2 14,8 20,8" />
+                    </svg>
+                    Diff
+                  </button>
+                )}
+              </div>
+
+              {/* Latest commit */}
+              <div className="flex items-center justify-between py-1.5">
+                <div className="flex items-center gap-2">
+                  <span className="text-text-secondary text-sm">latest commit:</span>
+                  <span className="text-info text-sm font-mono">#{gitInfo.latest_commit_hash}</span>
+                  <span className="text-text-secondary text-sm">{gitInfo.latest_commit_time}</span>
+                </div>
+                <button
+                  onClick={() => handleDiffClick('commit')}
+                  className="flex items-center gap-1.5 px-3 py-1 rounded-md border border-text-secondary/30 text-text-secondary text-xs hover:bg-bg-card transition-colors"
+                >
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                    <polyline points="14,2 14,8 20,8" />
+                  </svg>
+                  Diff
+                </button>
+              </div>
+
+              {/* Branch */}
+              <div className="flex items-center justify-between py-1.5">
+                <div className="flex items-center gap-2">
+                  <span className="text-text-secondary text-sm">branch:</span>
+                  <span className="text-success text-sm">{gitInfo.branch}</span>
+                </div>
+                <button
+                  onClick={() => handleDiffClick('branch')}
+                  className="flex items-center gap-1.5 px-3 py-1 rounded-md border border-text-secondary/30 text-text-secondary text-xs hover:bg-bg-card transition-colors"
+                >
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                    <polyline points="14,2 14,8 20,8" />
+                  </svg>
+                  Diff
+                </button>
+              </div>
+            </>
+          ) : (
+            <div className="text-text-secondary text-sm">Not a git repository</div>
+          )}
         </div>
       )}
     </div>

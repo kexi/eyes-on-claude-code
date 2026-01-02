@@ -45,3 +45,11 @@ export interface Settings {
   opacity_inactive: number;
   sound_enabled: boolean;
 }
+
+export interface GitInfo {
+  branch: string;
+  latest_commit_hash: string;
+  latest_commit_time: string;
+  has_unstaged_changes: boolean;
+  is_git_repo: boolean;
+}

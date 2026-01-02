@@ -1,13 +1,20 @@
 import { invoke } from '@tauri-apps/api/core';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 import { getCurrentWindow } from '@tauri-apps/api/window';
-import type { DashboardData, Settings } from '@/types';
+import type { DashboardData, GitInfo, Settings } from '@/types';
 
 // Commands
 export const getDashboardData = () => invoke<DashboardData>('get_dashboard_data');
 export const removeSession = (projectDir: string) => invoke('remove_session', { projectDir });
 export const clearAllSessions = () => invoke('clear_all_sessions');
 export const getSettings = () => invoke<Settings>('get_settings');
+export const getRepoGitInfo = (projectDir: string) =>
+  invoke<GitInfo>('get_repo_git_info', { projectDir });
+
+export type DiffType = 'unstaged' | 'commit' | 'branch';
+
+export const openDiff = (projectDir: string, diffType: DiffType, baseBranch?: string) =>
+  invoke('open_diff', { projectDir, diffType, baseBranch });
 
 // Window operations
 export const getAppWindow = () => {

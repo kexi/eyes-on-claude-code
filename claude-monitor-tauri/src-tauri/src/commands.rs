@@ -1,6 +1,8 @@
 use tauri::Manager;
 
 use crate::constants::{MINI_VIEW_HEIGHT, MINI_VIEW_WIDTH, NORMAL_VIEW_HEIGHT, NORMAL_VIEW_WIDTH};
+use crate::difit::{open_difit, DiffType};
+use crate::git::{get_git_info, GitInfo};
 use crate::settings::save_settings;
 use crate::state::{DashboardData, ManagedState, Settings};
 use crate::tray::{emit_state_update, update_tray_and_badge};
@@ -118,4 +120,21 @@ pub fn set_opacity_inactive(
     state_guard.settings.opacity_inactive = opacity.clamp(0.1, 1.0);
     save_settings(&state_guard.settings);
     Ok(())
+}
+
+#[tauri::command]
+pub fn get_repo_git_info(project_dir: String) -> GitInfo {
+    get_git_info(&project_dir)
+}
+
+#[tauri::command]
+pub fn open_diff(project_dir: String, diff_type: String, base_branch: Option<String>) -> Result<(), String> {
+    let diff = match diff_type.as_str() {
+        "unstaged" => DiffType::Unstaged,
+        "commit" => DiffType::LatestCommit,
+        "branch" => DiffType::Branch,
+        _ => return Err(format!("Unknown diff type: {}", diff_type)),
+    };
+
+    open_difit(&project_dir, diff, base_branch.as_deref())
 }
