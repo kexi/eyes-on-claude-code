@@ -140,6 +140,48 @@ fn generate_diff_window_label(project_dir: &str, diff_type: &str) -> String {
     format!("difit-{:x}", hasher.finish())
 }
 
+/// Loading page HTML for diff window
+const LOADING_HTML: &str = r#"
+<!DOCTYPE html>
+<html>
+<head>
+    <style>
+        body {
+            margin: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            background: #1a1a2e;
+            color: #eee;
+            font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+        }
+        .loader {
+            text-align: center;
+        }
+        .spinner {
+            width: 40px;
+            height: 40px;
+            border: 3px solid #333;
+            border-top-color: #6c5ce7;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 16px;
+        }
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+    <div class="loader">
+        <div class="spinner"></div>
+        <div>Loading diff...</div>
+    </div>
+</body>
+</html>
+"#;
+
 #[tauri::command]
 pub fn open_diff(
     project_dir: String,
@@ -181,25 +223,25 @@ pub fn open_diff(
     // Get next available port
     let port = difit_registry.get_next_port();
 
-    // Start difit server
-    let server_info = start_difit_server(&project_dir, diff, base_branch.as_deref(), port)?;
+    // Create loading page data URL
+    let loading_url = format!(
+        "data:text/html;base64,{}",
+        base64_encode(LOADING_HTML.as_bytes())
+    );
 
-    // Create a new window for the diff viewer
+    // Create window immediately with loading page
     let window = WebviewWindowBuilder::new(
         &app,
         &window_label,
-        WebviewUrl::External(server_info.url.parse().map_err(|e| format!("Invalid URL: {}", e))?),
+        WebviewUrl::External(loading_url.parse().map_err(|e| format!("Invalid URL: {}", e))?),
     )
-    .title(format!("Diff - {}", diff_type))
+    .title(format!("Diff - {} (Loading...)", diff_type))
     .inner_size(1200.0, 800.0)
     .center()
     .build()
     .map_err(|e| format!("Failed to create diff window: {}", e))?;
 
-    // Register the process with the window label
-    difit_registry.register(window_label.clone(), server_info.process);
-
-    // Set up window close handler to kill the difit process
+    // Set up window close handler
     let registry_clone = Arc::clone(&difit_registry);
     let label_clone = window_label.clone();
     window.on_window_event(move |event| {
@@ -208,5 +250,66 @@ pub fn open_diff(
         }
     });
 
+    // Start difit server in background thread
+    let app_handle = app.app_handle().clone();
+    let registry = Arc::clone(&difit_registry);
+    let window_label_for_thread = window_label.clone();
+    let diff_type_for_title = diff_type.clone();
+
+    std::thread::spawn(move || {
+        match start_difit_server(&project_dir, diff, base_branch.as_deref(), port) {
+            Ok(server_info) => {
+                // Register the process
+                registry.register(window_label_for_thread.clone(), server_info.process);
+
+                // Navigate window to difit URL
+                if let Some(window) = app_handle.get_webview_window(&window_label_for_thread) {
+                    if let Ok(url) = server_info.url.parse() {
+                        let _ = window.navigate(url);
+                        let _ = window.set_title(&format!("Diff - {}", diff_type_for_title));
+                    }
+                }
+            }
+            Err(e) => {
+                // Show error in window
+                if let Some(window) = app_handle.get_webview_window(&window_label_for_thread) {
+                    let error_html = format!(
+                        r#"data:text/html;base64,{}"#,
+                        base64_encode(
+                            format!(
+                                r#"<!DOCTYPE html><html><head><style>
+                                body {{ margin: 0; display: flex; justify-content: center; align-items: center;
+                                height: 100vh; background: #1a1a2e; color: #e74c3c;
+                                font-family: -apple-system, BlinkMacSystemFont, sans-serif; }}
+                                .error {{ text-align: center; padding: 20px; }}
+                                </style></head><body><div class="error">
+                                <h2>Failed to load diff</h2><p>{}</p>
+                                </div></body></html>"#,
+                                html_escape(&e)
+                            )
+                            .as_bytes()
+                        )
+                    );
+                    if let Ok(url) = error_html.parse() {
+                        let _ = window.navigate(url);
+                        let _ = window.set_title(&format!("Diff - {} (Error)", diff_type_for_title));
+                    }
+                }
+            }
+        }
+    });
+
     Ok(())
+}
+
+fn base64_encode(data: &[u8]) -> String {
+    use base64::{engine::general_purpose::STANDARD, Engine};
+    STANDARD.encode(data)
+}
+
+fn html_escape(s: &str) -> String {
+    s.replace('&', "&amp;")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;")
+        .replace('"', "&quot;")
 }
