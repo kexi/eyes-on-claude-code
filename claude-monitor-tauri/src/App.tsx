@@ -30,7 +30,7 @@ const Dashboard = () => {
   // Handle window drag in mini-view mode
   useWindowDrag();
 
-  // Bring diff windows to front when dashboard is focused
+  // Bring diff windows to front when dashboard is focused (via Cmd+Tab etc.)
   useEffect(() => {
     let unlisten: (() => void) | undefined;
     onWindowFocus(() => {
