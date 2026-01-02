@@ -81,7 +81,7 @@ fn build_session_items<R: Runtime>(
 
 fn build_events_submenu<R: Runtime>(
     app: &tauri::AppHandle<R>,
-    events: &[EventInfo],
+    events: &std::collections::VecDeque<EventInfo>,
 ) -> tauri::Result<Option<Submenu<R>>> {
     if events.is_empty() {
         return Ok(None);

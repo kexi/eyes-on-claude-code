@@ -1,5 +1,5 @@
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 use std::sync::{Arc, Mutex};
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -128,7 +128,7 @@ impl Default for Settings {
 
 pub struct AppState {
     pub sessions: HashMap<String, SessionInfo>,
-    pub recent_events: Vec<EventInfo>,
+    pub recent_events: VecDeque<EventInfo>,
     pub last_file_pos: u64,
     pub settings: Settings,
 }
@@ -146,7 +146,7 @@ impl AppState {
     pub fn to_dashboard_data(&self) -> DashboardData {
         DashboardData {
             sessions: self.sessions.values().cloned().collect(),
-            events: self.recent_events.clone(),
+            events: self.recent_events.iter().cloned().collect(),
         }
     }
 
@@ -179,7 +179,7 @@ impl Default for AppState {
     fn default() -> Self {
         Self {
             sessions: HashMap::new(),
-            recent_events: Vec::new(),
+            recent_events: VecDeque::new(),
             last_file_pos: 0,
             settings: Settings::default(),
         }

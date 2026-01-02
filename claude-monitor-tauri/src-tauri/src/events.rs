@@ -5,9 +5,9 @@ use crate::settings::get_events_file;
 use crate::state::{AppState, EventInfo, EventType, NotificationType, SessionInfo, SessionStatus};
 
 pub fn process_event(state: &mut AppState, event: EventInfo) {
-    state.recent_events.push(event.clone());
+    state.recent_events.push_back(event.clone());
     if state.recent_events.len() > 50 {
-        state.recent_events.remove(0);
+        state.recent_events.pop_front();
     }
 
     let key = if event.project_dir.is_empty() {
