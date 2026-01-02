@@ -53,3 +53,6 @@ export interface GitInfo {
   has_unstaged_changes: boolean;
   is_git_repo: boolean;
 }
+
+// Diff type for difit integration
+export type DiffType = 'unstaged' | 'commit' | 'branch';

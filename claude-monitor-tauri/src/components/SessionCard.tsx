@@ -2,6 +2,8 @@ import { useState, useEffect } from 'react';
 import type { SessionInfo, GitInfo } from '@/types';
 import { getStatusEmoji, getStatusClass } from '@/lib/utils';
 import { removeSession, getRepoGitInfo, openDiff, type DiffType } from '@/lib/tauri';
+import { ChevronDownIcon } from './icons';
+import { DiffButton } from './DiffButton';
 
 interface SessionCardProps {
   session: SessionInfo;
@@ -121,21 +123,7 @@ export const SessionCard = ({ session, isMiniView }: SessionCardProps) => {
               isExpanded ? 'rotate-180' : ''
             }`}
           >
-            <svg
-              width="12"
-              height="8"
-              viewBox="0 0 12 8"
-              fill="none"
-              className="text-text-secondary"
-            >
-              <path
-                d="M1 1.5L6 6.5L11 1.5"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-            </svg>
+            <ChevronDownIcon className="text-text-secondary" />
           </div>
         </div>
       </div>
@@ -160,16 +148,7 @@ export const SessionCard = ({ session, isMiniView }: SessionCardProps) => {
                   </span>
                 </div>
                 {gitInfo.has_unstaged_changes && (
-                  <button
-                    onClick={() => handleDiffClick('unstaged')}
-                    className="flex items-center gap-1.5 px-3 py-1 rounded-md border border-text-secondary/30 text-text-secondary text-xs hover:bg-bg-card transition-colors"
-                  >
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-                      <polyline points="14,2 14,8 20,8" />
-                    </svg>
-                    Diff
-                  </button>
+                  <DiffButton onClick={() => handleDiffClick('unstaged')} />
                 )}
               </div>
 
@@ -180,16 +159,7 @@ export const SessionCard = ({ session, isMiniView }: SessionCardProps) => {
                   <span className="text-info text-sm font-mono">#{gitInfo.latest_commit_hash}</span>
                   <span className="text-text-secondary text-sm">{gitInfo.latest_commit_time}</span>
                 </div>
-                <button
-                  onClick={() => handleDiffClick('commit')}
-                  className="flex items-center gap-1.5 px-3 py-1 rounded-md border border-text-secondary/30 text-text-secondary text-xs hover:bg-bg-card transition-colors"
-                >
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-                    <polyline points="14,2 14,8 20,8" />
-                  </svg>
-                  Diff
-                </button>
+                <DiffButton onClick={() => handleDiffClick('commit')} />
               </div>
 
               {/* Branch */}
@@ -198,16 +168,7 @@ export const SessionCard = ({ session, isMiniView }: SessionCardProps) => {
                   <span className="text-text-secondary text-sm">branch:</span>
                   <span className="text-success text-sm">{gitInfo.branch}</span>
                 </div>
-                <button
-                  onClick={() => handleDiffClick('branch')}
-                  className="flex items-center gap-1.5 px-3 py-1 rounded-md border border-text-secondary/30 text-text-secondary text-xs hover:bg-bg-card transition-colors"
-                >
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-                    <polyline points="14,2 14,8 20,8" />
-                  </svg>
-                  Diff
-                </button>
+                <DiffButton onClick={() => handleDiffClick('branch')} />
               </div>
             </>
           ) : (
