@@ -21,6 +21,7 @@
   },
   "dependencies": {
     "@tauri-apps/api": "^2.0.0",
+    "difit": "^2.2.7",
     "react": "^18.2.0",
     "react-dom": "^18.2.0"
   }
