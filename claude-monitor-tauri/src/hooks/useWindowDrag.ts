@@ -1,18 +1,31 @@
-import { useEffect, useRef, type RefObject } from 'react';
-import { startDragging } from '@/lib/tauri';
+import { useEffect } from 'react';
 
-export const useWindowDrag = (containerRef: RefObject<HTMLElement | null>, isMiniView: boolean) => {
-  // Use ref to track isMiniView without triggering effect re-runs
-  const isMiniViewRef = useRef(isMiniView);
-  isMiniViewRef.current = isMiniView;
+// Use global Tauri object (same as original implementation)
+declare global {
+  interface Window {
+    __TAURI__?: {
+      window?: {
+        getCurrentWindow: () => {
+          startDragging: () => Promise<void>;
+        };
+      };
+    };
+  }
+}
 
+export const useWindowDrag = () => {
   useEffect(() => {
-    const container = containerRef.current;
+    // Use document.querySelector exactly like the original implementation
+    const container = document.querySelector('.container') as HTMLElement | null;
     if (!container) return;
 
     const handleMouseDown = async (e: MouseEvent) => {
-      // Only enable dragging in mini view mode (check current value via ref)
-      if (!isMiniViewRef.current) return;
+      // Check for mini-view mode by checking DOM class (exactly like original)
+      if (!document.body.classList.contains('mini-view')) return;
+
+      // Get appWindow fresh on each mousedown
+      const appWindow = window.__TAURI__?.window?.getCurrentWindow();
+      if (!appWindow) return;
 
       const target = e.target as HTMLElement;
 
@@ -30,7 +43,7 @@ export const useWindowDrag = (containerRef: RefObject<HTMLElement | null>, isMin
       // Only left mouse button
       if (e.buttons === 1) {
         try {
-          await startDragging();
+          await appWindow.startDragging();
         } catch (error) {
           console.error('Failed to start dragging:', error);
         }
@@ -39,5 +52,5 @@ export const useWindowDrag = (containerRef: RefObject<HTMLElement | null>, isMin
 
     container.addEventListener('mousedown', handleMouseDown);
     return () => container.removeEventListener('mousedown', handleMouseDown);
-  }, [containerRef]);
+  }, []);
 };

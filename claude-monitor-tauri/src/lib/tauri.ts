@@ -18,13 +18,6 @@ export const getAppWindow = () => {
   }
 };
 
-export const startDragging = async () => {
-  const window = getAppWindow();
-  if (window) {
-    await window.startDragging();
-  }
-};
-
 export const isFocused = async (): Promise<boolean> => {
   const window = getAppWindow();
   if (window) {

@@ -1,4 +1,4 @@
-import { useRef, useEffect } from 'react';
+import { useEffect } from 'react';
 import { AppProvider, useAppContext } from '@/context/AppContext';
 import { useWindowOpacity } from '@/hooks/useWindowOpacity';
 import { useWindowDrag } from '@/hooks/useWindowDrag';
@@ -9,7 +9,6 @@ import { EventList } from '@/components/EventList';
 
 const Dashboard = () => {
   const { dashboardData, settings, isLoading, refreshData } = useAppContext();
-  const containerRef = useRef<HTMLDivElement>(null);
   const isMiniView = settings.mini_view;
 
   // Apply mini-view class to body
@@ -28,7 +27,7 @@ const Dashboard = () => {
   useWindowOpacity(settings.opacity_active, settings.opacity_inactive);
 
   // Handle window drag in mini-view mode
-  useWindowDrag(containerRef, isMiniView);
+  useWindowDrag();
 
   if (isLoading) {
     return (
@@ -40,7 +39,6 @@ const Dashboard = () => {
 
   return (
     <div
-      ref={containerRef}
       className={`container bg-bg-primary h-screen rounded-xl max-w-[900px] mx-auto overflow-y-auto ${
         isMiniView ? 'p-2.5' : 'p-5'
       }`}
