@@ -1,7 +1,8 @@
-use tauri::Manager;
+use std::sync::Arc;
+use tauri::{Manager, WebviewUrl, WebviewWindowBuilder};
 
 use crate::constants::{MINI_VIEW_HEIGHT, MINI_VIEW_WIDTH, NORMAL_VIEW_HEIGHT, NORMAL_VIEW_WIDTH};
-use crate::difit::{open_difit, DiffType};
+use crate::difit::{start_difit_server, DiffType, DifitProcessRegistry};
 use crate::git::{get_git_info, GitInfo};
 use crate::settings::save_settings;
 use crate::state::{DashboardData, ManagedState, Settings};
@@ -128,7 +129,13 @@ pub fn get_repo_git_info(project_dir: String) -> GitInfo {
 }
 
 #[tauri::command]
-pub fn open_diff(project_dir: String, diff_type: String, base_branch: Option<String>) -> Result<(), String> {
+pub fn open_diff(
+    project_dir: String,
+    diff_type: String,
+    base_branch: Option<String>,
+    app: tauri::AppHandle,
+    difit_registry: tauri::State<'_, Arc<DifitProcessRegistry>>,
+) -> Result<(), String> {
     let diff = match diff_type.as_str() {
         "unstaged" => DiffType::Unstaged,
         "commit" => DiffType::LatestCommit,
@@ -136,5 +143,38 @@ pub fn open_diff(project_dir: String, diff_type: String, base_branch: Option<Str
         _ => return Err(format!("Unknown diff type: {}", diff_type)),
     };
 
-    open_difit(&project_dir, diff, base_branch.as_deref())
+    // Get next available port
+    let port = difit_registry.get_next_port();
+
+    // Start difit server
+    let server_info = start_difit_server(&project_dir, diff, base_branch.as_deref(), port)?;
+
+    // Create unique window label
+    let window_label = format!("difit-{}", port);
+
+    // Create a new window for the diff viewer
+    let window = WebviewWindowBuilder::new(
+        &app,
+        &window_label,
+        WebviewUrl::External(server_info.url.parse().map_err(|e| format!("Invalid URL: {}", e))?),
+    )
+    .title(format!("Diff - {}", diff_type))
+    .inner_size(1200.0, 800.0)
+    .center()
+    .build()
+    .map_err(|e| format!("Failed to create diff window: {}", e))?;
+
+    // Register the process with the window label
+    difit_registry.register(window_label.clone(), server_info.process);
+
+    // Set up window close handler to kill the difit process
+    let registry_clone = Arc::clone(&difit_registry);
+    let label_clone = window_label.clone();
+    window.on_window_event(move |event| {
+        if let tauri::WindowEvent::Destroyed = event {
+            registry_clone.kill(&label_clone);
+        }
+    });
+
+    Ok(())
 }

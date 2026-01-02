@@ -20,6 +20,8 @@ use tauri::{
     Emitter, Manager, WebviewUrl, WebviewWindowBuilder,
 };
 
+use difit::DifitProcessRegistry;
+
 use commands::{
     clear_all_sessions, get_always_on_top, get_dashboard_data, get_mini_view, get_repo_git_info,
     get_settings, open_diff, remove_session, set_always_on_top, set_mini_view, set_opacity_active,
@@ -173,6 +175,7 @@ fn load_existing_events(state: &mut AppState) {
 
 fn main() {
     let state = Arc::new(Mutex::new(AppState::default()));
+    let difit_registry = Arc::new(DifitProcessRegistry::new());
 
     // Load settings and existing events
     {
@@ -186,10 +189,12 @@ fn main() {
 
     let state_clone = Arc::clone(&state);
     let state_for_managed = Arc::clone(&state);
+    let difit_registry_clone = Arc::clone(&difit_registry);
 
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
         .manage(ManagedState(state_for_managed))
+        .manage(difit_registry_clone)
         .invoke_handler(tauri::generate_handler![
             get_dashboard_data,
             remove_session,
@@ -363,6 +368,16 @@ fn main() {
 
             Ok(())
         })
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .on_window_event(move |_window, _event| {
+            // Note: This is called for each window event
+            // We handle difit window cleanup in commands.rs on_window_event
+        })
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application")
+        .run(move |_app_handle, event| {
+            if let tauri::RunEvent::Exit = event {
+                // Kill all difit processes on app exit
+                difit_registry.kill_all();
+            }
+        });
 }
