@@ -5,6 +5,7 @@ use std::process::Command;
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GitInfo {
     pub branch: String,
+    pub default_branch: String,
     pub latest_commit_hash: String,
     pub latest_commit_time: String,
     pub has_unstaged_changes: bool,
@@ -15,6 +16,7 @@ impl Default for GitInfo {
     fn default() -> Self {
         Self {
             branch: String::new(),
+            default_branch: String::new(),
             latest_commit_hash: String::new(),
             latest_commit_time: String::new(),
             has_unstaged_changes: false,
@@ -37,11 +39,13 @@ pub fn get_git_info(repo_path: &str) -> GitInfo {
     }
 
     let branch = get_current_branch(repo_path).unwrap_or_default();
+    let default_branch = get_default_branch(repo_path);
     let (latest_commit_hash, latest_commit_time) = get_latest_commit(repo_path);
     let has_unstaged_changes = check_unstaged_changes(repo_path);
 
     GitInfo {
         branch,
+        default_branch,
         latest_commit_hash,
         latest_commit_time,
         has_unstaged_changes,
@@ -84,4 +88,45 @@ fn check_unstaged_changes(repo_path: &str) -> bool {
         Some(output) => !output.is_empty(),
         None => false,
     }
+}
+
+fn get_default_branch(repo_path: &str) -> String {
+    // 1. Try to get default branch from remote HEAD (if remote exists)
+    if let Some(remote_head) =
+        run_git_command(repo_path, &["symbolic-ref", "refs/remotes/origin/HEAD"])
+    {
+        // Output is like "refs/remotes/origin/main"
+        if let Some(branch) = remote_head.strip_prefix("refs/remotes/origin/") {
+            if !branch.is_empty() {
+                return branch.to_string();
+            }
+        }
+    }
+
+    // 2. Check git config for init.defaultBranch setting
+    if let Some(config_default) = run_git_command(repo_path, &["config", "init.defaultBranch"]) {
+        if !config_default.is_empty() {
+            return config_default;
+        }
+    }
+
+    // 3. Check if common default branches exist locally
+    for branch in ["main", "master", "develop"] {
+        if run_git_command(repo_path, &["rev-parse", "--verify", branch]).is_some() {
+            return branch.to_string();
+        }
+    }
+
+    // 4. Get the first local branch as last resort
+    if let Some(branches) = run_git_command(repo_path, &["branch", "--format=%(refname:short)"]) {
+        if let Some(first_branch) = branches.lines().next() {
+            let trimmed = first_branch.trim();
+            if !trimmed.is_empty() {
+                return trimmed.to_string();
+            }
+        }
+    }
+
+    // 5. Fallback to main if nothing works
+    "main".to_string()
 }

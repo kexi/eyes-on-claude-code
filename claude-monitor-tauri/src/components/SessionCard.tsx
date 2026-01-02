@@ -49,9 +49,8 @@ export const SessionCard = ({ session, isMiniView }: SessionCardProps) => {
 
   const handleDiffClick = async (type: DiffType) => {
     try {
-      // For branch diff, we need to determine the base branch
-      // Default to 'main', could also check for 'master'
-      const baseBranch = type === 'branch' ? 'main' : undefined;
+      // For branch diff, use the detected default branch
+      const baseBranch = type === 'branch' ? gitInfo?.default_branch : undefined;
       await openDiff(session.project_dir, type, baseBranch);
     } catch (error) {
       console.error('Failed to open diff:', error);

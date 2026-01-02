@@ -48,6 +48,7 @@ export interface Settings {
 
 export interface GitInfo {
   branch: string;
+  default_branch: string;
   latest_commit_hash: string;
   latest_commit_time: string;
   has_unstaged_changes: boolean;

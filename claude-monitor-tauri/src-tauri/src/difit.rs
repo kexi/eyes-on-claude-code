@@ -2,6 +2,8 @@ use std::collections::HashMap;
 use std::io::{BufRead, BufReader, Write};
 use std::process::{Child, Command, Stdio};
 use std::sync::Mutex;
+use std::sync::mpsc;
+use std::time::Duration;
 
 /// Default base branch for branch diff comparison
 const DEFAULT_BASE_BRANCH: &str = "main";
@@ -45,7 +47,6 @@ impl DiffType {
 /// Result of starting a difit server
 pub struct DifitServerInfo {
     pub url: String,
-    pub port: u16,
     pub process: Child,
 }
 
@@ -157,37 +158,44 @@ pub fn start_difit_server(
             .map_err(|e| format!("Failed to write to difit stdin: {}", e))?;
     } // stdin is dropped here, closing the pipe
 
-    // Read stderr to find the server URL
+    // Read stderr to find the server URL with timeout
     let stderr = difit_process
         .stderr
         .take()
         .ok_or("Failed to capture difit stderr")?;
-    let reader = BufReader::new(stderr);
 
-    let mut actual_port = port;
-    for line in reader.lines().take(10) {
-        if let Ok(line) = line {
-            // Look for "difit server started on http://localhost:XXXX"
-            if line.contains("difit server started on") {
-                if let Some(url_start) = line.find("http://") {
-                    let url = &line[url_start..];
-                    // Extract port from URL
-                    if let Some(port_str) = url.strip_prefix("http://localhost:") {
-                        if let Ok(p) = port_str.trim().parse::<u16>() {
-                            actual_port = p;
+    // Use a channel to receive the port from a background thread
+    let (tx, rx) = mpsc::channel();
+    let expected_port = port;
+    std::thread::spawn(move || {
+        let reader = BufReader::new(stderr);
+        for line in reader.lines().take(10) {
+            if let Ok(line) = line {
+                // Look for "difit server started on http://localhost:XXXX"
+                if line.contains("difit server started on") {
+                    if let Some(url_start) = line.find("http://") {
+                        let url = &line[url_start..];
+                        // Extract port from URL
+                        if let Some(port_str) = url.strip_prefix("http://localhost:") {
+                            if let Ok(p) = port_str.trim().parse::<u16>() {
+                                let _ = tx.send(p);
+                                return;
+                            }
                         }
                     }
                 }
-                break;
             }
         }
-    }
+        // Send expected port if we couldn't find the actual one
+        let _ = tx.send(expected_port);
+    });
 
+    // Wait for up to 5 seconds for the server to start
+    let actual_port = rx.recv_timeout(Duration::from_secs(5)).unwrap_or(port);
     let url = format!("http://localhost:{}", actual_port);
 
     Ok(DifitServerInfo {
         url,
-        port: actual_port,
         process: difit_process,
     })
 }
