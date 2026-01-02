@@ -14,8 +14,10 @@ const DEFAULT_DIFIT_PORT: u16 = 4966;
 /// Diff types supported by the application
 #[derive(Debug, Clone, Copy)]
 pub enum DiffType {
-    /// Unstaged changes (working directory vs HEAD)
+    /// Unstaged changes (working directory vs index)
     Unstaged,
+    /// Staged changes (index vs HEAD)
+    Staged,
     /// Latest commit diff (HEAD vs HEAD~1)
     LatestCommit,
     /// Branch diff (current branch vs main/master)
@@ -27,6 +29,7 @@ impl DiffType {
     fn to_git_diff_args(&self, branch: Option<&str>) -> Result<Vec<String>, String> {
         match self {
             DiffType::Unstaged => Ok(vec!["diff".to_string()]),
+            DiffType::Staged => Ok(vec!["diff".to_string(), "--cached".to_string()]),
             DiffType::LatestCommit => Ok(vec![
                 "diff".to_string(),
                 "HEAD~1".to_string(),

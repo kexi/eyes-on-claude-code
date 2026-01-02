@@ -165,10 +165,10 @@ export const SessionCard = ({ session, isMiniView }: SessionCardProps) => {
               {/* Unstaged changes */}
               <div className="flex items-center justify-between py-1.5">
                 <div className="flex items-center gap-2">
-                  <span className="text-text-secondary text-sm">unstaged changes:</span>
+                  <span className="text-text-secondary text-sm">unstaged:</span>
                   <span
                     className={`text-sm ${
-                      gitInfo.has_unstaged_changes ? 'text-red-400' : 'text-text-secondary'
+                      gitInfo.has_unstaged_changes ? 'text-orange-400' : 'text-text-secondary'
                     }`}
                   >
                     {gitInfo.has_unstaged_changes ? 'Changed' : 'No changes'}
@@ -176,6 +176,23 @@ export const SessionCard = ({ session, isMiniView }: SessionCardProps) => {
                 </div>
                 {gitInfo.has_unstaged_changes && (
                   <DiffButton onClick={() => handleDiffClick('unstaged')} />
+                )}
+              </div>
+
+              {/* Staged changes */}
+              <div className="flex items-center justify-between py-1.5">
+                <div className="flex items-center gap-2">
+                  <span className="text-text-secondary text-sm">staged:</span>
+                  <span
+                    className={`text-sm ${
+                      gitInfo.has_staged_changes ? 'text-green-400' : 'text-text-secondary'
+                    }`}
+                  >
+                    {gitInfo.has_staged_changes ? 'Changed' : 'No changes'}
+                  </span>
+                </div>
+                {gitInfo.has_staged_changes && (
+                  <DiffButton onClick={() => handleDiffClick('staged')} />
                 )}
               </div>
 

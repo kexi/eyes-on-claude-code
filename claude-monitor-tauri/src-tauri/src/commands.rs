@@ -215,6 +215,7 @@ pub fn open_diff(
 
     let diff = match diff_type.as_str() {
         "unstaged" => DiffType::Unstaged,
+        "staged" => DiffType::Staged,
         "commit" => DiffType::LatestCommit,
         "branch" => DiffType::Branch,
         _ => return Err(format!("Unknown diff type: {}", diff_type)),

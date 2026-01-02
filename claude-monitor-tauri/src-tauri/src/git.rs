@@ -9,6 +9,7 @@ pub struct GitInfo {
     pub latest_commit_hash: String,
     pub latest_commit_time: String,
     pub has_unstaged_changes: bool,
+    pub has_staged_changes: bool,
     pub is_git_repo: bool,
 }
 
@@ -20,6 +21,7 @@ impl Default for GitInfo {
             latest_commit_hash: String::new(),
             latest_commit_time: String::new(),
             has_unstaged_changes: false,
+            has_staged_changes: false,
             is_git_repo: false,
         }
     }
@@ -42,6 +44,7 @@ pub fn get_git_info(repo_path: &str) -> GitInfo {
     let default_branch = get_default_branch(repo_path);
     let (latest_commit_hash, latest_commit_time) = get_latest_commit(repo_path);
     let has_unstaged_changes = check_unstaged_changes(repo_path);
+    let has_staged_changes = check_staged_changes(repo_path);
 
     GitInfo {
         branch,
@@ -49,6 +52,7 @@ pub fn get_git_info(repo_path: &str) -> GitInfo {
         latest_commit_hash,
         latest_commit_time,
         has_unstaged_changes,
+        has_staged_changes,
         is_git_repo: true,
     }
 }
@@ -82,12 +86,28 @@ fn get_latest_commit(repo_path: &str) -> (String, String) {
 }
 
 fn check_unstaged_changes(repo_path: &str) -> bool {
-    // Check for unstaged changes (modified, deleted, untracked)
-    let status = run_git_command(repo_path, &["status", "--porcelain"]);
-    match status {
-        Some(output) => !output.is_empty(),
-        None => false,
-    }
+    // Check for unstaged changes in tracked files using git diff
+    let has_tracked_changes = Command::new("git")
+        .args(["-C", repo_path, "diff", "--quiet"])
+        .status()
+        .map(|s| !s.success()) // exit code 1 means there are changes
+        .unwrap_or(false);
+
+    // Check for untracked files
+    let has_untracked = run_git_command(repo_path, &["ls-files", "--others", "--exclude-standard"])
+        .map(|output| !output.is_empty())
+        .unwrap_or(false);
+
+    has_tracked_changes || has_untracked
+}
+
+fn check_staged_changes(repo_path: &str) -> bool {
+    // Check for staged changes using git diff --cached
+    Command::new("git")
+        .args(["-C", repo_path, "diff", "--cached", "--quiet"])
+        .status()
+        .map(|s| !s.success()) // exit code 1 means there are staged changes
+        .unwrap_or(false)
 }
 
 fn get_default_branch(repo_path: &str) -> String {

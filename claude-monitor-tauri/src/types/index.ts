@@ -52,8 +52,9 @@ export interface GitInfo {
   latest_commit_hash: string;
   latest_commit_time: string;
   has_unstaged_changes: boolean;
+  has_staged_changes: boolean;
   is_git_repo: boolean;
 }
 
 // Diff type for difit integration
-export type DiffType = 'unstaged' | 'commit' | 'branch';
+export type DiffType = 'unstaged' | 'staged' | 'commit' | 'branch';
