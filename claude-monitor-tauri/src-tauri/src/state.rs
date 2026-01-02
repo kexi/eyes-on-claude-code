@@ -2,18 +2,47 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum EventType {
+    SessionStart,
+    SessionEnd,
+    Notification,
+    Stop,
+    PostToolUse,
+    #[serde(other)]
+    Unknown,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum NotificationType {
+    PermissionPrompt,
+    IdlePrompt,
+    #[serde(other)]
+    Other,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EventInfo {
     pub timestamp: String,
-    pub event: String,
+    #[serde(rename = "event")]
+    pub event_type: EventType,
     pub matcher: String,
     pub project_name: String,
     pub project_dir: String,
     pub session_id: String,
     pub message: String,
-    pub notification_type: String,
+    #[serde(default)]
+    pub notification_type: NotificationType,
     #[serde(default)]
     pub tool_name: String,
+}
+
+impl Default for NotificationType {
+    fn default() -> Self {
+        NotificationType::Other
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

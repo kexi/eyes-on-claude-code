@@ -2,7 +2,7 @@ use std::fs::File;
 use std::io::{BufRead, BufReader, Seek, SeekFrom};
 
 use crate::settings::get_events_file;
-use crate::state::{AppState, EventInfo, SessionInfo, SessionStatus};
+use crate::state::{AppState, EventInfo, EventType, NotificationType, SessionInfo, SessionStatus};
 
 pub fn process_event(state: &mut AppState, event: EventInfo) {
     state.recent_events.push(event.clone());
@@ -16,8 +16,8 @@ pub fn process_event(state: &mut AppState, event: EventInfo) {
         event.project_dir.clone()
     };
 
-    match event.event.as_str() {
-        "session_start" => {
+    match event.event_type {
+        EventType::SessionStart => {
             state.sessions.insert(
                 key,
                 SessionInfo {
@@ -29,14 +29,14 @@ pub fn process_event(state: &mut AppState, event: EventInfo) {
                 },
             );
         }
-        "session_end" => {
+        EventType::SessionEnd => {
             state.sessions.remove(&key);
         }
-        "notification" => {
-            let new_status = match event.notification_type.as_str() {
-                "permission_prompt" => SessionStatus::WaitingPermission,
-                "idle_prompt" => SessionStatus::WaitingInput,
-                _ => SessionStatus::Active,
+        EventType::Notification => {
+            let new_status = match event.notification_type {
+                NotificationType::PermissionPrompt => SessionStatus::WaitingPermission,
+                NotificationType::IdlePrompt => SessionStatus::WaitingInput,
+                NotificationType::Other => SessionStatus::Active,
             };
             let waiting_info = if !event.message.is_empty() {
                 event.message.clone()
@@ -47,13 +47,13 @@ pub fn process_event(state: &mut AppState, event: EventInfo) {
             };
             state.upsert_session(key, &event, new_status, waiting_info);
         }
-        "stop" => {
+        EventType::Stop => {
             state.upsert_session(key, &event, SessionStatus::Completed, String::new());
         }
-        "post_tool_use" => {
+        EventType::PostToolUse => {
             state.upsert_session(key, &event, SessionStatus::Active, String::new());
         }
-        _ => {
+        EventType::Unknown => {
             if let Some(session) = state.sessions.get_mut(&key) {
                 session.last_event = event.timestamp;
             }

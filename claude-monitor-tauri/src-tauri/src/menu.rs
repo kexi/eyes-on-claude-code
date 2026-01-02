@@ -6,7 +6,7 @@ use tauri::{
     Runtime,
 };
 
-use crate::state::{AppState, EventInfo, SessionInfo, SessionStatus, Settings};
+use crate::state::{AppState, EventInfo, EventType, NotificationType, SessionInfo, SessionStatus, Settings};
 
 /// Parse opacity menu ID and return (is_active, opacity_value) if valid
 /// Menu ID format: "opacity_{inactive|active}_{10|30|50|70|80|90|100}"
@@ -90,18 +90,27 @@ fn build_events_submenu<R: Runtime>(
     let mut submenu_builder = SubmenuBuilder::new(app, "Recent Events");
 
     for (idx, event) in events.iter().rev().take(10).enumerate() {
-        let emoji = match event.event.as_str() {
-            "notification" => match event.notification_type.as_str() {
-                "permission_prompt" => "🔐",
-                "idle_prompt" => "⏳",
-                _ => "🔔",
+        let emoji = match &event.event_type {
+            EventType::Notification => match &event.notification_type {
+                NotificationType::PermissionPrompt => "🔐",
+                NotificationType::IdlePrompt => "⏳",
+                NotificationType::Other => "🔔",
             },
-            "stop" => "✅",
-            "session_start" => "🚀",
-            "session_end" => "🏁",
-            _ => "📌",
+            EventType::Stop => "✅",
+            EventType::SessionStart => "🚀",
+            EventType::SessionEnd => "🏁",
+            EventType::PostToolUse => "🔧",
+            EventType::Unknown => "📌",
         };
-        let title = format!("{} {}: {}", emoji, event.project_name, event.event);
+        let event_name = match &event.event_type {
+            EventType::SessionStart => "session_start",
+            EventType::SessionEnd => "session_end",
+            EventType::Notification => "notification",
+            EventType::Stop => "stop",
+            EventType::PostToolUse => "post_tool_use",
+            EventType::Unknown => "unknown",
+        };
+        let title = format!("{} {}: {}", emoji, event.project_name, event_name);
         let item = MenuItemBuilder::with_id(format!("event_{}", idx), &title)
             .enabled(false)
             .build(app)?;
