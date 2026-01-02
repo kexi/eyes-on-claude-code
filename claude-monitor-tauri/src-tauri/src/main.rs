@@ -22,7 +22,9 @@ use commands::{
     clear_all_sessions, get_always_on_top, get_dashboard_data, get_mini_view, get_settings,
     remove_session, set_always_on_top, set_mini_view, set_opacity_active, set_opacity_inactive,
 };
-use constants::{ICON_NORMAL, MINI_VIEW_HEIGHT, MINI_VIEW_WIDTH, NORMAL_VIEW_HEIGHT, NORMAL_VIEW_WIDTH};
+use constants::{
+    ICON_NORMAL, MINI_VIEW_HEIGHT, MINI_VIEW_WIDTH, NORMAL_VIEW_HEIGHT, NORMAL_VIEW_WIDTH,
+};
 use events::{process_event, read_new_events};
 use menu::{build_menu, parse_opacity_menu_id};
 use settings::{get_events_file, get_log_dir, load_settings, save_settings};
@@ -54,42 +56,107 @@ fn toggle_mini_view(app: &tauri::AppHandle, state: &mut AppState) {
         if state.settings.mini_view {
             let _ = window.set_size(tauri::LogicalSize::new(MINI_VIEW_WIDTH, MINI_VIEW_HEIGHT));
         } else {
-            let _ = window.set_size(tauri::LogicalSize::new(NORMAL_VIEW_WIDTH, NORMAL_VIEW_HEIGHT));
+            let _ = window.set_size(tauri::LogicalSize::new(
+                NORMAL_VIEW_WIDTH,
+                NORMAL_VIEW_HEIGHT,
+            ));
             let _ = window.center();
         }
     }
 
-    // Emit settings update to frontend
     let _ = app.emit("settings-updated", &state.settings);
+}
+
+fn create_dashboard_window(
+    app: &tauri::App,
+    always_on_top: bool,
+    mini_view: bool,
+) -> tauri::Result<tauri::WebviewWindow> {
+    let (width, height) = if mini_view {
+        (MINI_VIEW_WIDTH, MINI_VIEW_HEIGHT)
+    } else {
+        (NORMAL_VIEW_WIDTH, NORMAL_VIEW_HEIGHT)
+    };
+
+    let transparent_color = Color(0, 0, 0, 0);
+
+    let base_builder = WebviewWindowBuilder::new(app, "dashboard", WebviewUrl::App("index.html".into()))
+        .title("Claude Monitor - Dashboard")
+        .inner_size(width, height)
+        .min_inner_size(200.0, 300.0)
+        .center()
+        .visible(true)
+        .always_on_top(always_on_top)
+        .decorations(!mini_view)
+        .transparent(true)
+        .background_color(transparent_color);
+
+    match Image::from_bytes(ICON_NORMAL) {
+        Ok(icon) => base_builder.icon(icon)?.build(),
+        Err(_) => base_builder.build(),
+    }
+}
+
+fn start_file_watcher(app_handle: tauri::AppHandle, state: Arc<Mutex<AppState>>) {
+    std::thread::spawn(move || {
+        let log_dir = get_log_dir();
+        let _ = fs::create_dir_all(&log_dir);
+
+        let (tx, rx) = std::sync::mpsc::channel();
+
+        let mut watcher =
+            RecommendedWatcher::new(tx, Config::default()).expect("Failed to create watcher");
+
+        watcher
+            .watch(&log_dir, RecursiveMode::NonRecursive)
+            .expect("Failed to watch directory");
+
+        loop {
+            match rx.recv() {
+                Ok(_event) => {
+                    let mut state_guard = state.lock().unwrap();
+                    let new_events = read_new_events(&mut state_guard);
+
+                    if !new_events.is_empty() {
+                        update_tray_and_badge(&app_handle, &state_guard);
+                        emit_state_update(&app_handle, &state_guard);
+                    }
+                }
+                Err(e) => {
+                    eprintln!("Watch error: {:?}", e);
+                    break;
+                }
+            }
+        }
+    });
+}
+
+fn load_existing_events(state: &mut AppState) {
+    let events_file = get_events_file();
+    if events_file.exists() {
+        if let Ok(content) = fs::read_to_string(&events_file) {
+            for line in content.lines() {
+                if !line.is_empty() {
+                    if let Ok(event) = serde_json::from_str::<EventInfo>(line) {
+                        process_event(state, event);
+                    }
+                }
+            }
+            if let Ok(metadata) = fs::metadata(&events_file) {
+                state.last_file_pos = metadata.len();
+            }
+        }
+    }
 }
 
 fn main() {
     let state = Arc::new(Mutex::new(AppState::default()));
 
-    // Load settings
+    // Load settings and existing events
     {
         let mut state_guard = state.lock().unwrap();
         state_guard.settings = load_settings();
-    }
-
-    // Load existing events
-    {
-        let mut state_guard = state.lock().unwrap();
-        let events_file = get_events_file();
-        if events_file.exists() {
-            if let Ok(content) = fs::read_to_string(&events_file) {
-                for line in content.lines() {
-                    if !line.is_empty() {
-                        if let Ok(event) = serde_json::from_str::<EventInfo>(line) {
-                            process_event(&mut state_guard, event);
-                        }
-                    }
-                }
-                if let Ok(metadata) = fs::metadata(&events_file) {
-                    state_guard.last_file_pos = metadata.len();
-                }
-            }
-        }
+        load_existing_events(&mut state_guard);
     }
 
     let state_clone = Arc::clone(&state);
@@ -117,39 +184,14 @@ fn main() {
             // Get initial settings
             let (always_on_top, mini_view) = {
                 let state_guard = state_for_tray.lock().unwrap();
-                (state_guard.settings.always_on_top, state_guard.settings.mini_view)
+                (
+                    state_guard.settings.always_on_top,
+                    state_guard.settings.mini_view,
+                )
             };
 
-            // Determine initial window size based on mini_view setting
-            let (width, height) = if mini_view {
-                (MINI_VIEW_WIDTH, MINI_VIEW_HEIGHT)
-            } else {
-                (NORMAL_VIEW_WIDTH, NORMAL_VIEW_HEIGHT)
-            };
-
-            // Create dashboard window with settings applied
-            // Use transparent background color (RGBA with alpha = 0)
-            let transparent_color = Color(0, 0, 0, 0);
-
-            let base_builder = WebviewWindowBuilder::new(
-                app,
-                "dashboard",
-                WebviewUrl::App("index.html".into()),
-            )
-            .title("Claude Monitor - Dashboard")
-            .inner_size(width, height)
-            .min_inner_size(200.0, 300.0)
-            .center()
-            .visible(true)
-            .always_on_top(always_on_top)
-            .decorations(!mini_view)
-            .transparent(true)
-            .background_color(transparent_color);
-
-            let dashboard_window = match Image::from_bytes(ICON_NORMAL) {
-                Ok(icon) => base_builder.icon(icon)?.build()?,
-                Err(_) => base_builder.build()?,
-            };
+            // Create dashboard window
+            let dashboard_window = create_dashboard_window(app, always_on_top, mini_view)?;
 
             // Set initial badge count
             {
@@ -185,54 +227,51 @@ fn main() {
                 .menu(&menu)
                 .show_menu_on_left_click(true)
                 .tooltip("Claude Monitor")
-                .on_menu_event(move |app, event| {
-                    match event.id.as_ref() {
-                        "quit" => {
-                            app.exit(0);
-                        }
-                        "open_dashboard" => {
-                            show_dashboard(app);
-                        }
-                        "always_on_top" => {
+                .on_menu_event(move |app, event| match event.id.as_ref() {
+                    "quit" => {
+                        app.exit(0);
+                    }
+                    "open_dashboard" => {
+                        show_dashboard(app);
+                    }
+                    "always_on_top" => {
+                        let mut state_guard = state_for_tray.lock().unwrap();
+                        toggle_always_on_top(app, &mut state_guard);
+                        update_tray_and_badge(app, &state_guard);
+                    }
+                    "mini_view" => {
+                        let mut state_guard = state_for_tray.lock().unwrap();
+                        toggle_mini_view(app, &mut state_guard);
+                        update_tray_and_badge(app, &state_guard);
+                    }
+                    "sound_enabled" => {
+                        let mut state_guard = state_for_tray.lock().unwrap();
+                        state_guard.settings.sound_enabled = !state_guard.settings.sound_enabled;
+                        save_settings(&state_guard.settings);
+                        let _ = app.emit("settings-updated", &state_guard.settings);
+                        update_tray_and_badge(app, &state_guard);
+                    }
+                    "open_logs" => {
+                        let log_dir = get_log_dir();
+                        let _ = opener::open(&log_dir);
+                    }
+                    "clear_sessions" => {
+                        let mut state_guard = state_for_tray.lock().unwrap();
+                        state_guard.sessions.clear();
+                        update_tray_and_badge(app, &state_guard);
+                        emit_state_update(app, &state_guard);
+                    }
+                    other => {
+                        if let Some((is_active, opacity)) = parse_opacity_menu_id(other) {
                             let mut state_guard = state_for_tray.lock().unwrap();
-                            toggle_always_on_top(app, &mut state_guard);
-                            update_tray_and_badge(app, &state_guard);
-                        }
-                        "mini_view" => {
-                            let mut state_guard = state_for_tray.lock().unwrap();
-                            toggle_mini_view(app, &mut state_guard);
-                            update_tray_and_badge(app, &state_guard);
-                        }
-                        "sound_enabled" => {
-                            let mut state_guard = state_for_tray.lock().unwrap();
-                            state_guard.settings.sound_enabled = !state_guard.settings.sound_enabled;
+                            if is_active {
+                                state_guard.settings.opacity_active = opacity;
+                            } else {
+                                state_guard.settings.opacity_inactive = opacity;
+                            }
                             save_settings(&state_guard.settings);
                             let _ = app.emit("settings-updated", &state_guard.settings);
                             update_tray_and_badge(app, &state_guard);
-                        }
-                        "open_logs" => {
-                            let log_dir = get_log_dir();
-                            let _ = opener::open(&log_dir);
-                        }
-                        "clear_sessions" => {
-                            let mut state_guard = state_for_tray.lock().unwrap();
-                            state_guard.sessions.clear();
-                            update_tray_and_badge(app, &state_guard);
-                            emit_state_update(app, &state_guard);
-                        }
-                        other => {
-                            // Handle opacity menu items dynamically (opacity_active_*, opacity_inactive_*)
-                            if let Some((is_active, opacity)) = parse_opacity_menu_id(other) {
-                                let mut state_guard = state_for_tray.lock().unwrap();
-                                if is_active {
-                                    state_guard.settings.opacity_active = opacity;
-                                } else {
-                                    state_guard.settings.opacity_inactive = opacity;
-                                }
-                                save_settings(&state_guard.settings);
-                                let _ = app.emit("settings-updated", &state_guard.settings);
-                                update_tray_and_badge(app, &state_guard);
-                            }
                         }
                     }
                 })
@@ -249,40 +288,7 @@ fn main() {
                 .build(app)?;
 
             // Start file watcher
-            let state_for_watcher = Arc::clone(&state_clone);
-            let app_handle_for_watcher = app.handle().clone();
-
-            std::thread::spawn(move || {
-                let log_dir = get_log_dir();
-                let _ = fs::create_dir_all(&log_dir);
-
-                let (tx, rx) = std::sync::mpsc::channel();
-
-                let mut watcher =
-                    RecommendedWatcher::new(tx, Config::default()).expect("Failed to create watcher");
-
-                watcher
-                    .watch(&log_dir, RecursiveMode::NonRecursive)
-                    .expect("Failed to watch directory");
-
-                loop {
-                    match rx.recv() {
-                        Ok(_event) => {
-                            let mut state_guard = state_for_watcher.lock().unwrap();
-                            let new_events = read_new_events(&mut state_guard);
-
-                            if !new_events.is_empty() {
-                                update_tray_and_badge(&app_handle_for_watcher, &state_guard);
-                                emit_state_update(&app_handle_for_watcher, &state_guard);
-                            }
-                        }
-                        Err(e) => {
-                            eprintln!("Watch error: {:?}", e);
-                            break;
-                        }
-                    }
-                }
-            });
+            start_file_watcher(app.handle().clone(), Arc::clone(&state_clone));
 
             Ok(())
         })
