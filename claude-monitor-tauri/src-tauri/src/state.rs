@@ -82,46 +82,54 @@ pub struct DashboardData {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Settings {
-    #[serde(default = "default_always_on_top")]
+    #[serde(default = "Settings::default_always_on_top")]
     pub always_on_top: bool,
-    #[serde(default = "default_mini_view")]
+    #[serde(default = "Settings::default_mini_view")]
     pub mini_view: bool,
-    #[serde(default = "default_opacity_active")]
+    #[serde(default = "Settings::default_opacity_active")]
     pub opacity_active: f64,
-    #[serde(default = "default_opacity_inactive")]
+    #[serde(default = "Settings::default_opacity_inactive")]
     pub opacity_inactive: f64,
-    #[serde(default = "default_sound_enabled")]
+    #[serde(default = "Settings::default_sound_enabled")]
     pub sound_enabled: bool,
 }
 
-fn default_always_on_top() -> bool {
-    true
-}
+impl Settings {
+    pub const DEFAULT_ALWAYS_ON_TOP: bool = true;
+    pub const DEFAULT_MINI_VIEW: bool = true;
+    pub const DEFAULT_OPACITY_ACTIVE: f64 = 1.0;
+    pub const DEFAULT_OPACITY_INACTIVE: f64 = 0.3;
+    pub const DEFAULT_SOUND_ENABLED: bool = true;
 
-fn default_mini_view() -> bool {
-    true
-}
+    fn default_always_on_top() -> bool {
+        Self::DEFAULT_ALWAYS_ON_TOP
+    }
 
-fn default_opacity_active() -> f64 {
-    1.0 // 100%
-}
+    fn default_mini_view() -> bool {
+        Self::DEFAULT_MINI_VIEW
+    }
 
-fn default_opacity_inactive() -> f64 {
-    0.3 // 30%
-}
+    fn default_opacity_active() -> f64 {
+        Self::DEFAULT_OPACITY_ACTIVE
+    }
 
-fn default_sound_enabled() -> bool {
-    true
+    fn default_opacity_inactive() -> f64 {
+        Self::DEFAULT_OPACITY_INACTIVE
+    }
+
+    fn default_sound_enabled() -> bool {
+        Self::DEFAULT_SOUND_ENABLED
+    }
 }
 
 impl Default for Settings {
     fn default() -> Self {
         Self {
-            always_on_top: true,
-            mini_view: true,
-            opacity_active: 1.0,
-            opacity_inactive: 0.3,
-            sound_enabled: true,
+            always_on_top: Self::DEFAULT_ALWAYS_ON_TOP,
+            mini_view: Self::DEFAULT_MINI_VIEW,
+            opacity_active: Self::DEFAULT_OPACITY_ACTIVE,
+            opacity_inactive: Self::DEFAULT_OPACITY_INACTIVE,
+            sound_enabled: Self::DEFAULT_SOUND_ENABLED,
         }
     }
 }
