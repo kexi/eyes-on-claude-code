@@ -76,6 +76,8 @@ struct Settings {
     opacity_active: f64,
     #[serde(default = "default_opacity_inactive")]
     opacity_inactive: f64,
+    #[serde(default = "default_sound_enabled")]
+    sound_enabled: bool,
 }
 
 fn default_always_on_top() -> bool {
@@ -94,6 +96,10 @@ fn default_opacity_inactive() -> f64 {
     0.3 // 30%
 }
 
+fn default_sound_enabled() -> bool {
+    true
+}
+
 impl Default for Settings {
     fn default() -> Self {
         Self {
@@ -101,6 +107,7 @@ impl Default for Settings {
             mini_view: true,
             opacity_active: 1.0,
             opacity_inactive: 0.3,
+            sound_enabled: true,
         }
     }
 }
@@ -353,6 +360,10 @@ fn build_menu<R: Runtime>(app: &tauri::AppHandle<R>, state: &AppState) -> tauri:
         .checked(state.settings.mini_view)
         .build(app)?;
 
+    let sound_enabled = CheckMenuItemBuilder::with_id("sound_enabled", "Sound")
+        .checked(state.settings.sound_enabled)
+        .build(app)?;
+
     // Opacity submenu
     let opacity_inactive_label = format!("Inactive: {}%", (state.settings.opacity_inactive * 100.0) as i32);
     let opacity_active_label = format!("Active: {}%", (state.settings.opacity_active * 100.0) as i32);
@@ -426,7 +437,7 @@ fn build_menu<R: Runtime>(app: &tauri::AppHandle<R>, state: &AppState) -> tauri:
         .accelerator("CmdOrCtrl+Q")
         .build(app)?;
 
-    let menu = Menu::with_items(app, &[&header, &sep1, &open_dashboard, &always_on_top, &mini_view, &opacity_submenu, &sep_dashboard])?;
+    let menu = Menu::with_items(app, &[&header, &sep1, &open_dashboard, &always_on_top, &mini_view, &sound_enabled, &opacity_submenu, &sep_dashboard])?;
 
     for item in &session_items {
         menu.append(item)?;
@@ -759,6 +770,13 @@ fn main() {
                         "mini_view" => {
                             let mut state_guard = state_for_tray.lock().unwrap();
                             toggle_mini_view(app, &mut state_guard);
+                            update_tray_and_badge(app, &state_guard);
+                        }
+                        "sound_enabled" => {
+                            let mut state_guard = state_for_tray.lock().unwrap();
+                            state_guard.settings.sound_enabled = !state_guard.settings.sound_enabled;
+                            save_settings(&state_guard.settings);
+                            let _ = app.emit("settings-updated", &state_guard.settings);
                             update_tray_and_badge(app, &state_guard);
                         }
                         "open_logs" => {

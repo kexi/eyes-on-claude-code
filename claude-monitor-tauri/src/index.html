@@ -686,9 +686,99 @@
             }
         }
 
+        // ===== Sound Notification System =====
+        let audioContext = null;
+        let soundEnabled = true;
+
+        function getAudioContext() {
+            if (!audioContext) {
+                audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            }
+            return audioContext;
+        }
+
+        // Play a tone with given frequency, duration, and optional parameters
+        function playTone(frequency, duration, type = 'sine', volume = 0.3) {
+            try {
+                const ctx = getAudioContext();
+                const oscillator = ctx.createOscillator();
+                const gainNode = ctx.createGain();
+
+                oscillator.connect(gainNode);
+                gainNode.connect(ctx.destination);
+
+                oscillator.type = type;
+                oscillator.frequency.value = frequency;
+                gainNode.gain.value = volume;
+
+                oscillator.start(ctx.currentTime);
+                gainNode.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + duration);
+                oscillator.stop(ctx.currentTime + duration);
+            } catch (e) {
+                console.error('Failed to play sound:', e);
+            }
+        }
+
+        // Completion sound: Pleasant ascending two-tone chime
+        function playCompletionSound() {
+            if (!soundEnabled) return;
+
+            // First tone (lower)
+            playTone(523.25, 0.15, 'sine', 0.2); // C5
+
+            // Second tone (higher) after short delay
+            setTimeout(() => {
+                playTone(783.99, 0.25, 'sine', 0.2); // G5
+            }, 120);
+        }
+
+        // Waiting/Attention sound: Soft double beep
+        function playWaitingSound() {
+            if (!soundEnabled) return;
+
+            playTone(440, 0.1, 'sine', 0.15); // A4
+
+            setTimeout(() => {
+                playTone(440, 0.1, 'sine', 0.15); // A4 again
+            }, 150);
+        }
+
+        // Track previous session states to detect changes
+        let previousSessionStates = new Map();
+
+        function checkAndPlaySounds(sessions) {
+            if (!sessions) return;
+
+            for (const session of sessions) {
+                const key = session.project_dir || session.project_name;
+                const prevStatus = previousSessionStates.get(key);
+                const currentStatus = session.status;
+
+                // Only play sound if status changed
+                if (prevStatus !== currentStatus) {
+                    if (currentStatus === 'Completed') {
+                        playCompletionSound();
+                    } else if (currentStatus === 'WaitingPermission' || currentStatus === 'WaitingInput') {
+                        playWaitingSound();
+                    }
+                }
+
+                previousSessionStates.set(key, currentStatus);
+            }
+
+            // Clean up old sessions
+            const currentKeys = new Set(sessions.map(s => s.project_dir || s.project_name));
+            for (const key of previousSessionStates.keys()) {
+                if (!currentKeys.has(key)) {
+                    previousSessionStates.delete(key);
+                }
+            }
+        }
+
         // Listen for state updates from backend
         listen('state-updated', (event) => {
             const data = event.payload;
+            checkAndPlaySounds(data.sessions);
             renderSessions(data.sessions);
             renderEvents(data.events);
             updateStats(data.sessions, data.events);
@@ -707,6 +797,11 @@
                 opacitySettings.inactive = settings.opacity_inactive;
             }
             applyOpacity(document.hasFocus());
+
+            // Update sound setting
+            if (settings.sound_enabled !== undefined) {
+                soundEnabled = settings.sound_enabled;
+            }
         });
 
         function applyMiniView(enabled) {
@@ -726,6 +821,9 @@
                 opacitySettings.active = settings.opacity_active || 1.0;
                 opacitySettings.inactive = settings.opacity_inactive || 0.3;
                 applyOpacity(document.hasFocus());
+
+                // Load sound setting
+                soundEnabled = settings.sound_enabled !== false;
             } catch (error) {
                 console.error('Failed to load settings:', error);
             }
