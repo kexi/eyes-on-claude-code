@@ -320,6 +320,7 @@ dependencies = [
 name = "claude-monitor"
 version = "1.0.0"
 dependencies = [
+ "anyhow",
  "chrono",
  "dirs 5.0.1",
  "notify",

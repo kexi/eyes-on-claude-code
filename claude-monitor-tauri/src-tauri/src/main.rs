@@ -100,21 +100,33 @@ fn create_dashboard_window(
 fn start_file_watcher(app_handle: tauri::AppHandle, state: Arc<Mutex<AppState>>) {
     std::thread::spawn(move || {
         let log_dir = get_log_dir();
-        let _ = fs::create_dir_all(&log_dir);
+        if let Err(e) = fs::create_dir_all(&log_dir) {
+            eprintln!("[claude-monitor] Failed to create log directory: {:?}", e);
+            return;
+        }
 
         let (tx, rx) = std::sync::mpsc::channel();
 
-        let mut watcher =
-            RecommendedWatcher::new(tx, Config::default()).expect("Failed to create watcher");
+        let mut watcher = match RecommendedWatcher::new(tx, Config::default()) {
+            Ok(w) => w,
+            Err(e) => {
+                eprintln!("[claude-monitor] Failed to create file watcher: {:?}", e);
+                return;
+            }
+        };
 
-        watcher
-            .watch(&log_dir, RecursiveMode::NonRecursive)
-            .expect("Failed to watch directory");
+        if let Err(e) = watcher.watch(&log_dir, RecursiveMode::NonRecursive) {
+            eprintln!("[claude-monitor] Failed to watch directory: {:?}", e);
+            return;
+        }
 
         loop {
             match rx.recv() {
                 Ok(_event) => {
-                    let mut state_guard = state.lock().unwrap();
+                    let Ok(mut state_guard) = state.lock() else {
+                        eprintln!("[claude-monitor] Failed to acquire state lock in watcher");
+                        continue;
+                    };
                     let new_events = read_new_events(&mut state_guard);
 
                     if !new_events.is_empty() {
@@ -123,7 +135,7 @@ fn start_file_watcher(app_handle: tauri::AppHandle, state: Arc<Mutex<AppState>>)
                     }
                 }
                 Err(e) => {
-                    eprintln!("Watch error: {:?}", e);
+                    eprintln!("[claude-monitor] Watch channel error: {:?}", e);
                     break;
                 }
             }
@@ -154,7 +166,10 @@ fn main() {
 
     // Load settings and existing events
     {
-        let mut state_guard = state.lock().unwrap();
+        let Ok(mut state_guard) = state.lock() else {
+            eprintln!("[claude-monitor] Failed to acquire state lock during initialization");
+            return;
+        };
         state_guard.settings = load_settings();
         load_existing_events(&mut state_guard);
     }
@@ -183,7 +198,9 @@ fn main() {
 
             // Get initial settings
             let (always_on_top, mini_view) = {
-                let state_guard = state_for_tray.lock().unwrap();
+                let state_guard = state_for_tray
+                    .lock()
+                    .map_err(|_| tauri::Error::Anyhow(anyhow::anyhow!("Failed to acquire state lock")))?;
                 (
                     state_guard.settings.always_on_top,
                     state_guard.settings.mini_view,
@@ -194,8 +211,7 @@ fn main() {
             let dashboard_window = create_dashboard_window(app, always_on_top, mini_view)?;
 
             // Set initial badge count
-            {
-                let state_guard = state_for_tray.lock().unwrap();
+            if let Ok(state_guard) = state_for_tray.lock() {
                 let waiting_count = state_guard.waiting_session_count();
                 if waiting_count > 0 {
                     let _ = dashboard_window.set_badge_count(Some(waiting_count as i64));
@@ -215,7 +231,9 @@ fn main() {
 
             // Build initial menu
             let (menu, _, _) = {
-                let state_guard = state_for_tray.lock().unwrap();
+                let state_guard = state_for_tray
+                    .lock()
+                    .map_err(|_| tauri::Error::Anyhow(anyhow::anyhow!("Failed to acquire state lock")))?;
                 build_menu(&app_handle, &state_guard)?
             };
 
@@ -235,43 +253,48 @@ fn main() {
                         show_dashboard(app);
                     }
                     "always_on_top" => {
-                        let mut state_guard = state_for_tray.lock().unwrap();
-                        toggle_always_on_top(app, &mut state_guard);
-                        update_tray_and_badge(app, &state_guard);
+                        if let Ok(mut state_guard) = state_for_tray.lock() {
+                            toggle_always_on_top(app, &mut state_guard);
+                            update_tray_and_badge(app, &state_guard);
+                        }
                     }
                     "mini_view" => {
-                        let mut state_guard = state_for_tray.lock().unwrap();
-                        toggle_mini_view(app, &mut state_guard);
-                        update_tray_and_badge(app, &state_guard);
+                        if let Ok(mut state_guard) = state_for_tray.lock() {
+                            toggle_mini_view(app, &mut state_guard);
+                            update_tray_and_badge(app, &state_guard);
+                        }
                     }
                     "sound_enabled" => {
-                        let mut state_guard = state_for_tray.lock().unwrap();
-                        state_guard.settings.sound_enabled = !state_guard.settings.sound_enabled;
-                        save_settings(&state_guard.settings);
-                        let _ = app.emit("settings-updated", &state_guard.settings);
-                        update_tray_and_badge(app, &state_guard);
+                        if let Ok(mut state_guard) = state_for_tray.lock() {
+                            state_guard.settings.sound_enabled = !state_guard.settings.sound_enabled;
+                            save_settings(&state_guard.settings);
+                            let _ = app.emit("settings-updated", &state_guard.settings);
+                            update_tray_and_badge(app, &state_guard);
+                        }
                     }
                     "open_logs" => {
                         let log_dir = get_log_dir();
                         let _ = opener::open(&log_dir);
                     }
                     "clear_sessions" => {
-                        let mut state_guard = state_for_tray.lock().unwrap();
-                        state_guard.sessions.clear();
-                        update_tray_and_badge(app, &state_guard);
-                        emit_state_update(app, &state_guard);
+                        if let Ok(mut state_guard) = state_for_tray.lock() {
+                            state_guard.sessions.clear();
+                            update_tray_and_badge(app, &state_guard);
+                            emit_state_update(app, &state_guard);
+                        }
                     }
                     other => {
                         if let Some((is_active, opacity)) = parse_opacity_menu_id(other) {
-                            let mut state_guard = state_for_tray.lock().unwrap();
-                            if is_active {
-                                state_guard.settings.opacity_active = opacity;
-                            } else {
-                                state_guard.settings.opacity_inactive = opacity;
+                            if let Ok(mut state_guard) = state_for_tray.lock() {
+                                if is_active {
+                                    state_guard.settings.opacity_active = opacity;
+                                } else {
+                                    state_guard.settings.opacity_inactive = opacity;
+                                }
+                                save_settings(&state_guard.settings);
+                                let _ = app.emit("settings-updated", &state_guard.settings);
+                                update_tray_and_badge(app, &state_guard);
                             }
-                            save_settings(&state_guard.settings);
-                            let _ = app.emit("settings-updated", &state_guard.settings);
-                            update_tray_and_badge(app, &state_guard);
                         }
                     }
                 })
