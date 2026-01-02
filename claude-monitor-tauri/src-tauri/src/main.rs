@@ -140,6 +140,30 @@ impl AppState {
             events: self.recent_events.clone(),
         }
     }
+
+    /// Insert or update a session with the given status and waiting_for info
+    fn upsert_session(
+        &mut self,
+        key: String,
+        event: &EventInfo,
+        status: SessionStatus,
+        waiting_for: String,
+    ) {
+        self.sessions
+            .entry(key)
+            .and_modify(|s| {
+                s.status = status.clone();
+                s.last_event = event.timestamp.clone();
+                s.waiting_for = waiting_for.clone();
+            })
+            .or_insert_with(|| SessionInfo {
+                project_name: event.project_name.clone(),
+                project_dir: event.project_dir.clone(),
+                status,
+                last_event: event.timestamp.clone(),
+                waiting_for,
+            });
+    }
 }
 
 impl Default for AppState {
@@ -193,6 +217,21 @@ fn save_settings(settings: &Settings) {
     }
 }
 
+/// Parse opacity menu ID and return (is_active, opacity_value) if valid
+/// Menu ID format: "opacity_{inactive|active}_{10|30|50|70|80|90|100}"
+fn parse_opacity_menu_id(menu_id: &str) -> Option<(bool, f64)> {
+    let suffix = menu_id.strip_prefix("opacity_")?;
+    let (target, value_str) = suffix.rsplit_once('_')?;
+    let value: i32 = value_str.parse().ok()?;
+    let opacity = value as f64 / 100.0;
+
+    match target {
+        "active" => Some((true, opacity)),
+        "inactive" => Some((false, opacity)),
+        _ => None,
+    }
+}
+
 fn process_event(state: &mut AppState, event: EventInfo) {
     state.recent_events.push(event.clone());
     if state.recent_events.len() > 50 {
@@ -234,52 +273,13 @@ fn process_event(state: &mut AppState, event: EventInfo) {
             } else {
                 String::new()
             };
-            state.sessions
-                .entry(key)
-                .and_modify(|s| {
-                    s.status = new_status.clone();
-                    s.last_event = event.timestamp.clone();
-                    s.waiting_for = waiting_info.clone();
-                })
-                .or_insert_with(|| SessionInfo {
-                    project_name: event.project_name,
-                    project_dir: event.project_dir,
-                    status: new_status,
-                    last_event: event.timestamp,
-                    waiting_for: waiting_info,
-                });
+            state.upsert_session(key, &event, new_status, waiting_info);
         }
         "stop" => {
-            state.sessions
-                .entry(key)
-                .and_modify(|s| {
-                    s.status = SessionStatus::Completed;
-                    s.last_event = event.timestamp.clone();
-                    s.waiting_for = String::new();
-                })
-                .or_insert_with(|| SessionInfo {
-                    project_name: event.project_name,
-                    project_dir: event.project_dir,
-                    status: SessionStatus::Completed,
-                    last_event: event.timestamp,
-                    waiting_for: String::new(),
-                });
+            state.upsert_session(key, &event, SessionStatus::Completed, String::new());
         }
         "post_tool_use" => {
-            state.sessions
-                .entry(key)
-                .and_modify(|s| {
-                    s.status = SessionStatus::Active;
-                    s.last_event = event.timestamp.clone();
-                    s.waiting_for = String::new();
-                })
-                .or_insert_with(|| SessionInfo {
-                    project_name: event.project_name,
-                    project_dir: event.project_dir,
-                    status: SessionStatus::Active,
-                    last_event: event.timestamp,
-                    waiting_for: String::new(),
-                });
+            state.upsert_session(key, &event, SessionStatus::Active, String::new());
         }
         _ => {
             if let Some(session) = state.sessions.get_mut(&key) {
@@ -681,43 +681,28 @@ fn main() {
                 (NORMAL_VIEW_WIDTH, NORMAL_VIEW_HEIGHT)
             };
 
-            // Create dashboard window (hidden initially, with settings applied)
+            // Create dashboard window with settings applied
             // Use transparent background color (RGBA with alpha = 0)
             let transparent_color = Color(0, 0, 0, 0);
 
-            let dashboard_window = if let Ok(icon) = Image::from_bytes(ICON_NORMAL) {
-                WebviewWindowBuilder::new(
-                    app,
-                    "dashboard",
-                    WebviewUrl::App("index.html".into()),
-                )
-                .title("Claude Monitor - Dashboard")
-                .inner_size(width, height)
-                .min_inner_size(200.0, 300.0)
-                .center()
-                .visible(true)
-                .always_on_top(always_on_top)
-                .decorations(!mini_view)
-                .transparent(true)
-                .background_color(transparent_color)
-                .icon(icon)?
-                .build()?
-            } else {
-                WebviewWindowBuilder::new(
-                    app,
-                    "dashboard",
-                    WebviewUrl::App("index.html".into()),
-                )
-                .title("Claude Monitor - Dashboard")
-                .inner_size(width, height)
-                .min_inner_size(200.0, 300.0)
-                .center()
-                .visible(true)
-                .always_on_top(always_on_top)
-                .decorations(!mini_view)
-                .transparent(true)
-                .background_color(transparent_color)
-                .build()?
+            let base_builder = WebviewWindowBuilder::new(
+                app,
+                "dashboard",
+                WebviewUrl::App("index.html".into()),
+            )
+            .title("Claude Monitor - Dashboard")
+            .inner_size(width, height)
+            .min_inner_size(200.0, 300.0)
+            .center()
+            .visible(true)
+            .always_on_top(always_on_top)
+            .decorations(!mini_view)
+            .transparent(true)
+            .background_color(transparent_color);
+
+            let dashboard_window = match Image::from_bytes(ICON_NORMAL) {
+                Ok(icon) => base_builder.icon(icon)?.build()?,
+                Err(_) => base_builder.build()?,
             };
 
             // Set initial badge count
@@ -789,72 +774,20 @@ fn main() {
                             update_tray_and_badge(app, &state_guard);
                             emit_state_update(app, &state_guard);
                         }
-                        // Opacity inactive settings
-                        "opacity_inactive_10" => {
-                            let mut state_guard = state_for_tray.lock().unwrap();
-                            state_guard.settings.opacity_inactive = 0.1;
-                            save_settings(&state_guard.settings);
-                            let _ = app.emit("settings-updated", &state_guard.settings);
-                            update_tray_and_badge(app, &state_guard);
+                        other => {
+                            // Handle opacity menu items dynamically (opacity_active_*, opacity_inactive_*)
+                            if let Some((is_active, opacity)) = parse_opacity_menu_id(other) {
+                                let mut state_guard = state_for_tray.lock().unwrap();
+                                if is_active {
+                                    state_guard.settings.opacity_active = opacity;
+                                } else {
+                                    state_guard.settings.opacity_inactive = opacity;
+                                }
+                                save_settings(&state_guard.settings);
+                                let _ = app.emit("settings-updated", &state_guard.settings);
+                                update_tray_and_badge(app, &state_guard);
+                            }
                         }
-                        "opacity_inactive_30" => {
-                            let mut state_guard = state_for_tray.lock().unwrap();
-                            state_guard.settings.opacity_inactive = 0.3;
-                            save_settings(&state_guard.settings);
-                            let _ = app.emit("settings-updated", &state_guard.settings);
-                            update_tray_and_badge(app, &state_guard);
-                        }
-                        "opacity_inactive_50" => {
-                            let mut state_guard = state_for_tray.lock().unwrap();
-                            state_guard.settings.opacity_inactive = 0.5;
-                            save_settings(&state_guard.settings);
-                            let _ = app.emit("settings-updated", &state_guard.settings);
-                            update_tray_and_badge(app, &state_guard);
-                        }
-                        "opacity_inactive_70" => {
-                            let mut state_guard = state_for_tray.lock().unwrap();
-                            state_guard.settings.opacity_inactive = 0.7;
-                            save_settings(&state_guard.settings);
-                            let _ = app.emit("settings-updated", &state_guard.settings);
-                            update_tray_and_badge(app, &state_guard);
-                        }
-                        "opacity_inactive_100" => {
-                            let mut state_guard = state_for_tray.lock().unwrap();
-                            state_guard.settings.opacity_inactive = 1.0;
-                            save_settings(&state_guard.settings);
-                            let _ = app.emit("settings-updated", &state_guard.settings);
-                            update_tray_and_badge(app, &state_guard);
-                        }
-                        // Opacity active settings
-                        "opacity_active_70" => {
-                            let mut state_guard = state_for_tray.lock().unwrap();
-                            state_guard.settings.opacity_active = 0.7;
-                            save_settings(&state_guard.settings);
-                            let _ = app.emit("settings-updated", &state_guard.settings);
-                            update_tray_and_badge(app, &state_guard);
-                        }
-                        "opacity_active_80" => {
-                            let mut state_guard = state_for_tray.lock().unwrap();
-                            state_guard.settings.opacity_active = 0.8;
-                            save_settings(&state_guard.settings);
-                            let _ = app.emit("settings-updated", &state_guard.settings);
-                            update_tray_and_badge(app, &state_guard);
-                        }
-                        "opacity_active_90" => {
-                            let mut state_guard = state_for_tray.lock().unwrap();
-                            state_guard.settings.opacity_active = 0.9;
-                            save_settings(&state_guard.settings);
-                            let _ = app.emit("settings-updated", &state_guard.settings);
-                            update_tray_and_badge(app, &state_guard);
-                        }
-                        "opacity_active_100" => {
-                            let mut state_guard = state_for_tray.lock().unwrap();
-                            state_guard.settings.opacity_active = 1.0;
-                            save_settings(&state_guard.settings);
-                            let _ = app.emit("settings-updated", &state_guard.settings);
-                            update_tray_and_badge(app, &state_guard);
-                        }
-                        _ => {}
                     }
                 })
                 .on_tray_icon_event(|_tray, event| {
