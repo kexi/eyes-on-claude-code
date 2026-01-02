@@ -6,6 +6,7 @@ local_*
 # Tauri build artifacts
 claude-monitor-tauri/src-tauri/target/
 claude-monitor-tauri/node_modules/
+claude-monitor-tauri/dist/
 
 # IDE
 .idea/

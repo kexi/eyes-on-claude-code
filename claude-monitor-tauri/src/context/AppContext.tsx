@@ -1,0 +1,131 @@
+import {
+  createContext,
+  useContext,
+  useState,
+  useEffect,
+  useCallback,
+  useRef,
+  type ReactNode,
+} from 'react';
+import type { DashboardData, Settings, SessionInfo } from '@/types';
+import { getDashboardData, getSettings, onStateUpdated, onSettingsUpdated } from '@/lib/tauri';
+import { playCompletionSound, playWaitingSound } from '@/lib/audio';
+
+interface AppContextValue {
+  dashboardData: DashboardData;
+  settings: Settings;
+  isLoading: boolean;
+  refreshData: () => Promise<void>;
+}
+
+const defaultDashboardData: DashboardData = { sessions: [], events: [] };
+const defaultSettings: Settings = {
+  always_on_top: true,
+  mini_view: true,
+  opacity_active: 1.0,
+  opacity_inactive: 0.3,
+  sound_enabled: true,
+};
+
+const AppContext = createContext<AppContextValue | null>(null);
+
+export const useAppContext = (): AppContextValue => {
+  const context = useContext(AppContext);
+  if (!context) throw new Error('useAppContext must be used within AppProvider');
+  return context;
+};
+
+export const AppProvider = ({ children }: { children: ReactNode }) => {
+  const [dashboardData, setDashboardData] = useState<DashboardData>(defaultDashboardData);
+  const [settings, setSettings] = useState<Settings>(defaultSettings);
+  const [isLoading, setIsLoading] = useState(true);
+  const previousStatesRef = useRef<Map<string, string>>(new Map());
+  const soundEnabledRef = useRef(true);
+
+  // Keep soundEnabledRef in sync with settings
+  useEffect(() => {
+    soundEnabledRef.current = settings.sound_enabled;
+  }, [settings.sound_enabled]);
+
+  const checkAndPlaySounds = useCallback((sessions: SessionInfo[]) => {
+    if (!soundEnabledRef.current) return;
+
+    for (const session of sessions) {
+      const key = session.project_dir || session.project_name;
+      const prevStatus = previousStatesRef.current.get(key);
+      const currentStatus = session.status;
+
+      if (prevStatus !== currentStatus) {
+        if (currentStatus === 'Completed') {
+          playCompletionSound();
+        } else if (currentStatus === 'WaitingPermission' || currentStatus === 'WaitingInput') {
+          playWaitingSound();
+        }
+      }
+      previousStatesRef.current.set(key, currentStatus);
+    }
+
+    // Cleanup old sessions
+    const currentKeys = new Set(sessions.map((s) => s.project_dir || s.project_name));
+    for (const key of previousStatesRef.current.keys()) {
+      if (!currentKeys.has(key)) {
+        previousStatesRef.current.delete(key);
+      }
+    }
+  }, []);
+
+  const refreshData = useCallback(async () => {
+    try {
+      const data = await getDashboardData();
+      setDashboardData(data);
+    } catch (error) {
+      console.error('Failed to fetch data:', error);
+    }
+  }, []);
+
+  // Initial load
+  useEffect(() => {
+    const init = async () => {
+      try {
+        const [data, loadedSettings] = await Promise.all([getDashboardData(), getSettings()]);
+        setDashboardData(data);
+        setSettings(loadedSettings);
+      } catch (error) {
+        console.error('Failed to initialize:', error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    init();
+  }, []);
+
+  // Tauri event listeners
+  useEffect(() => {
+    const unlisteners: Array<() => void> = [];
+
+    onStateUpdated((data) => {
+      checkAndPlaySounds(data.sessions);
+      setDashboardData(data);
+    }).then((unlisten) => unlisteners.push(unlisten));
+
+    onSettingsUpdated((newSettings) => {
+      setSettings(newSettings);
+    }).then((unlisten) => unlisteners.push(unlisten));
+
+    return () => {
+      unlisteners.forEach((unlisten) => unlisten());
+    };
+  }, [checkAndPlaySounds]);
+
+  // Auto-refresh backup
+  useEffect(() => {
+    const interval = setInterval(refreshData, 5000);
+    return () => clearInterval(interval);
+  }, [refreshData]);
+
+  return (
+    <AppContext.Provider value={{ dashboardData, settings, isLoading, refreshData }}>
+      {children}
+    </AppContext.Provider>
+  );
+};
