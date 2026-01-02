@@ -14,8 +14,17 @@ export const SessionCard = ({ session, isMiniView }: SessionCardProps) => {
   const [isExpanded, setIsExpanded] = useState(false);
   const [gitInfo, setGitInfo] = useState<GitInfo | null>(null);
   const [isLoadingGit, setIsLoadingGit] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const statusClass = getStatusClass(session.status);
+
+  // Auto-dismiss error after 5 seconds
+  useEffect(() => {
+    if (error) {
+      const timer = setTimeout(() => setError(null), 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [error]);
 
   const handleRemove = async (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -40,20 +49,28 @@ export const SessionCard = ({ session, isMiniView }: SessionCardProps) => {
   useEffect(() => {
     if (isExpanded && !gitInfo && !isLoadingGit) {
       setIsLoadingGit(true);
+      setError(null);
       getRepoGitInfo(session.project_dir)
         .then(setGitInfo)
-        .catch(console.error)
+        .catch((err) => {
+          const message = err instanceof Error ? err.message : String(err);
+          setError(`Failed to load git info: ${message}`);
+          console.error('Failed to load git info:', err);
+        })
         .finally(() => setIsLoadingGit(false));
     }
   }, [isExpanded, gitInfo, isLoadingGit, session.project_dir]);
 
   const handleDiffClick = async (type: DiffType) => {
     try {
+      setError(null);
       // For branch diff, use the detected default branch
       const baseBranch = type === 'branch' ? gitInfo?.default_branch : undefined;
       await openDiff(session.project_dir, type, baseBranch);
-    } catch (error) {
-      console.error('Failed to open diff:', error);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      setError(message);
+      console.error('Failed to open diff:', err);
     }
   };
 
@@ -130,6 +147,17 @@ export const SessionCard = ({ session, isMiniView }: SessionCardProps) => {
       {/* Expanded content - Git info */}
       {isExpanded && (
         <div className="border-t border-bg-card px-5 py-3 space-y-2">
+          {error && (
+            <div className="text-red-400 bg-red-400/10 rounded px-3 py-2 text-sm flex items-center justify-between">
+              <span>{error}</span>
+              <button
+                onClick={() => setError(null)}
+                className="text-red-400 hover:text-red-300 ml-2"
+              >
+                ×
+              </button>
+            </div>
+          )}
           {isLoadingGit ? (
             <div className="text-text-secondary text-sm">Loading git info...</div>
           ) : gitInfo?.is_git_repo ? (

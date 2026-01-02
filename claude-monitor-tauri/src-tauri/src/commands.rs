@@ -1,3 +1,4 @@
+use std::path::Path;
 use std::sync::Arc;
 use tauri::{Manager, WebviewUrl, WebviewWindowBuilder};
 
@@ -136,6 +137,19 @@ pub fn open_diff(
     app: tauri::AppHandle,
     difit_registry: tauri::State<'_, Arc<DifitProcessRegistry>>,
 ) -> Result<(), String> {
+    // Validate project directory
+    let path = Path::new(&project_dir);
+    if !path.exists() {
+        return Err(format!("Directory does not exist: {}", project_dir));
+    }
+    if !path.is_dir() {
+        return Err(format!("Path is not a directory: {}", project_dir));
+    }
+    // Check if it's a git repository
+    if !path.join(".git").exists() {
+        return Err(format!("Not a git repository: {}", project_dir));
+    }
+
     let diff = match diff_type.as_str() {
         "unstaged" => DiffType::Unstaged,
         "commit" => DiffType::LatestCommit,
