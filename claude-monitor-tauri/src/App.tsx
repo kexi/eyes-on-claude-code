@@ -6,6 +6,7 @@ import { Header } from '@/components/Header';
 import { StatsGrid } from '@/components/StatsGrid';
 import { SessionList } from '@/components/SessionList';
 import { EventList } from '@/components/EventList';
+import { onWindowFocus, bringDiffWindowsToFront } from '@/lib/tauri';
 
 const Dashboard = () => {
   const { dashboardData, settings, isLoading, refreshData } = useAppContext();
@@ -28,6 +29,17 @@ const Dashboard = () => {
 
   // Handle window drag in mini-view mode
   useWindowDrag();
+
+  // Bring diff windows to front when dashboard is focused
+  useEffect(() => {
+    let unlisten: (() => void) | undefined;
+    onWindowFocus(() => {
+      bringDiffWindowsToFront().catch(console.error);
+    }).then((u) => {
+      unlisten = u;
+    });
+    return () => unlisten?.();
+  }, []);
 
   if (isLoading) {
     return (

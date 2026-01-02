@@ -1,6 +1,6 @@
 import { invoke } from '@tauri-apps/api/core';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
-import { getCurrentWindow } from '@tauri-apps/api/window';
+import { getCurrentWindow, getAllWindows } from '@tauri-apps/api/window';
 import type { DashboardData, DiffType, GitInfo, Settings } from '@/types';
 
 // Commands
@@ -48,4 +48,20 @@ export const onWindowFocus = (callback: () => void): Promise<UnlistenFn> => {
 
 export const onWindowBlur = (callback: () => void): Promise<UnlistenFn> => {
   return listen('tauri://blur', callback);
+};
+
+// Bring all diff windows to front
+export const bringDiffWindowsToFront = async (): Promise<void> => {
+  const windows = await getAllWindows();
+  const diffWindows = windows.filter((w) => w.label.startsWith('difit-'));
+
+  for (const window of diffWindows) {
+    await window.show();
+    await window.unminimize();
+    await window.setFocus();
+  }
+
+  // Re-focus dashboard to keep it on top
+  const dashboard = getCurrentWindow();
+  await dashboard.setFocus();
 };
