@@ -129,6 +129,17 @@ pub fn get_repo_git_info(project_dir: String) -> GitInfo {
     get_git_info(&project_dir)
 }
 
+/// Generate a unique window label for a diff based on project and type
+fn generate_diff_window_label(project_dir: &str, diff_type: &str) -> String {
+    use std::collections::hash_map::DefaultHasher;
+    use std::hash::{Hash, Hasher};
+
+    let mut hasher = DefaultHasher::new();
+    project_dir.hash(&mut hasher);
+    diff_type.hash(&mut hasher);
+    format!("difit-{:x}", hasher.finish())
+}
+
 #[tauri::command]
 pub fn open_diff(
     project_dir: String,
@@ -150,6 +161,16 @@ pub fn open_diff(
         return Err(format!("Not a git repository: {}", project_dir));
     }
 
+    // Generate unique window label based on project and diff type
+    let window_label = generate_diff_window_label(&project_dir, &diff_type);
+
+    // Check if window already exists - if so, focus it and return
+    if let Some(existing_window) = app.get_webview_window(&window_label) {
+        let _ = existing_window.show();
+        let _ = existing_window.set_focus();
+        return Ok(());
+    }
+
     let diff = match diff_type.as_str() {
         "unstaged" => DiffType::Unstaged,
         "commit" => DiffType::LatestCommit,
@@ -162,9 +183,6 @@ pub fn open_diff(
 
     // Start difit server
     let server_info = start_difit_server(&project_dir, diff, base_branch.as_deref(), port)?;
-
-    // Create unique window label
-    let window_label = format!("difit-{}", port);
 
     // Create a new window for the diff viewer
     let window = WebviewWindowBuilder::new(
