@@ -235,11 +235,20 @@ fn main() {
                 }
             }
 
-            // Hide window when close button is clicked instead of destroying it
+            // Hide dashboard and close all diff windows when close button is clicked
             let app_handle_for_close = app_handle.clone();
             dashboard_window.on_window_event(move |event| {
                 if let tauri::WindowEvent::CloseRequested { api, .. } = event {
                     api.prevent_close();
+
+                    // Close all diff windows
+                    for (label, window) in app_handle_for_close.webview_windows() {
+                        if label.starts_with("difit-") {
+                            let _ = window.close();
+                        }
+                    }
+
+                    // Hide dashboard
                     if let Some(window) = app_handle_for_close.get_webview_window("dashboard") {
                         let _ = window.hide();
                     }
