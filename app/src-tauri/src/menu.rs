@@ -57,17 +57,17 @@ fn build_opacity_submenu<R: Runtime>(
 /// Build the application menu bar
 ///
 /// Structure:
-/// - Claude Monitor: About, Quit
+/// - Eyes on Claude Code: About, Quit
 /// - View: Mini View
 /// - Window: Open Dashboard, Always on Top, Opacity, Sound
 pub fn build_app_menu<R: Runtime>(
     app: &tauri::AppHandle<R>,
     state: &AppState,
 ) -> tauri::Result<Menu<R>> {
-    // Claude Monitor menu (app menu)
-    let app_menu = SubmenuBuilder::new(app, "Claude Monitor")
+    // Eyes on Claude Code menu (app menu)
+    let app_menu = SubmenuBuilder::new(app, "Eyes on Claude Code")
         .about(Some(AboutMetadata {
-            name: Some("Claude Monitor".to_string()),
+            name: Some("Eyes on Claude Code".to_string()),
             version: Some("1.0.0".to_string()),
             ..Default::default()
         }))

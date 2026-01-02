@@ -86,7 +86,7 @@ fn create_dashboard_window(
     let transparent_color = Color(0, 0, 0, 0);
 
     let base_builder = WebviewWindowBuilder::new(app, "dashboard", WebviewUrl::App("index.html".into()))
-        .title("Claude Monitor - Dashboard")
+        .title("Eyes on Claude Code")
         .inner_size(width, height)
         .min_inner_size(200.0, 300.0)
         .center()
@@ -105,11 +105,11 @@ fn create_dashboard_window(
 fn start_file_watcher(app_handle: tauri::AppHandle, state: Arc<Mutex<AppState>>) {
     std::thread::spawn(move || {
         let Some(log_dir) = get_log_dir() else {
-            eprintln!("[claude-monitor] Cannot start file watcher: home directory not found");
+            eprintln!("[eocc] Cannot start file watcher: home directory not found");
             return;
         };
         if let Err(e) = fs::create_dir_all(&log_dir) {
-            eprintln!("[claude-monitor] Failed to create log directory: {:?}", e);
+            eprintln!("[eocc] Failed to create log directory: {:?}", e);
             return;
         }
 
@@ -118,13 +118,13 @@ fn start_file_watcher(app_handle: tauri::AppHandle, state: Arc<Mutex<AppState>>)
         let mut watcher = match RecommendedWatcher::new(tx, Config::default()) {
             Ok(w) => w,
             Err(e) => {
-                eprintln!("[claude-monitor] Failed to create file watcher: {:?}", e);
+                eprintln!("[eocc] Failed to create file watcher: {:?}", e);
                 return;
             }
         };
 
         if let Err(e) = watcher.watch(&log_dir, RecursiveMode::NonRecursive) {
-            eprintln!("[claude-monitor] Failed to watch directory: {:?}", e);
+            eprintln!("[eocc] Failed to watch directory: {:?}", e);
             return;
         }
 
@@ -132,7 +132,7 @@ fn start_file_watcher(app_handle: tauri::AppHandle, state: Arc<Mutex<AppState>>)
             match rx.recv() {
                 Ok(_event) => {
                     let Ok(mut state_guard) = state.lock() else {
-                        eprintln!("[claude-monitor] Failed to acquire state lock in watcher");
+                        eprintln!("[eocc] Failed to acquire state lock in watcher");
                         continue;
                     };
                     let new_events = read_new_events(&mut state_guard);
@@ -143,7 +143,7 @@ fn start_file_watcher(app_handle: tauri::AppHandle, state: Arc<Mutex<AppState>>)
                     }
                 }
                 Err(e) => {
-                    eprintln!("[claude-monitor] Watch channel error: {:?}", e);
+                    eprintln!("[eocc] Watch channel error: {:?}", e);
                     break;
                 }
             }
@@ -153,7 +153,7 @@ fn start_file_watcher(app_handle: tauri::AppHandle, state: Arc<Mutex<AppState>>)
 
 fn load_existing_events(state: &mut AppState) {
     let Some(events_file) = get_events_file() else {
-        eprintln!("[claude-monitor] Cannot load events: home directory not found");
+        eprintln!("[eocc] Cannot load events: home directory not found");
         return;
     };
 
@@ -180,7 +180,7 @@ fn main() {
     // Load settings and existing events
     {
         let Ok(mut state_guard) = state.lock() else {
-            eprintln!("[claude-monitor] Failed to acquire state lock during initialization");
+            eprintln!("[eocc] Failed to acquire state lock during initialization");
             return;
         };
         state_guard.settings = load_settings();
@@ -278,7 +278,7 @@ fn main() {
                                 toggle_always_on_top(app, &mut state_guard);
                                 update_tray_and_badge(app, &state_guard);
                             }
-                            Err(e) => eprintln!("[claude-monitor] Failed to acquire lock for always_on_top: {:?}", e),
+                            Err(e) => eprintln!("[eocc] Failed to acquire lock for always_on_top: {:?}", e),
                         }
                     }
                     "mini_view" => {
@@ -287,7 +287,7 @@ fn main() {
                                 toggle_mini_view(app, &mut state_guard);
                                 update_tray_and_badge(app, &state_guard);
                             }
-                            Err(e) => eprintln!("[claude-monitor] Failed to acquire lock for mini_view: {:?}", e),
+                            Err(e) => eprintln!("[eocc] Failed to acquire lock for mini_view: {:?}", e),
                         }
                     }
                     "sound_enabled" => {
@@ -298,7 +298,7 @@ fn main() {
                                 let _ = app.emit("settings-updated", &state_guard.settings);
                                 update_tray_and_badge(app, &state_guard);
                             }
-                            Err(e) => eprintln!("[claude-monitor] Failed to acquire lock for sound_enabled: {:?}", e),
+                            Err(e) => eprintln!("[eocc] Failed to acquire lock for sound_enabled: {:?}", e),
                         }
                     }
                     other => {
@@ -314,7 +314,7 @@ fn main() {
                                     let _ = app.emit("settings-updated", &state_guard.settings);
                                     update_tray_and_badge(app, &state_guard);
                                 }
-                                Err(e) => eprintln!("[claude-monitor] Failed to acquire lock for opacity: {:?}", e),
+                                Err(e) => eprintln!("[eocc] Failed to acquire lock for opacity: {:?}", e),
                             }
                         }
                     }
@@ -336,7 +336,7 @@ fn main() {
                 .icon(initial_icon)
                 .menu(&tray_menu)
                 .show_menu_on_left_click(true)
-                .tooltip("Claude Monitor")
+                .tooltip("Eyes on Claude Code")
                 .on_menu_event(move |app, event| match event.id.as_ref() {
                     "open_dashboard" => {
                         show_dashboard(app);
@@ -345,7 +345,7 @@ fn main() {
                         if let Some(log_dir) = get_log_dir() {
                             let _ = opener::open(&log_dir);
                         } else {
-                            eprintln!("[claude-monitor] Cannot open logs: home directory not found");
+                            eprintln!("[eocc] Cannot open logs: home directory not found");
                         }
                     }
                     "clear_sessions" => {
@@ -355,7 +355,7 @@ fn main() {
                                 update_tray_and_badge(app, &state_guard);
                                 emit_state_update(app, &state_guard);
                             }
-                            Err(e) => eprintln!("[claude-monitor] Failed to acquire lock for clear_sessions: {:?}", e),
+                            Err(e) => eprintln!("[eocc] Failed to acquire lock for clear_sessions: {:?}", e),
                         }
                     }
                     _ => {}

@@ -20,7 +20,7 @@ export const Header = ({ sessions, isMiniView }: HeaderProps) => {
     >
       <div className="flex items-center gap-3">
         <h1 className={`font-semibold ${isMiniView ? 'text-sm whitespace-nowrap' : 'text-2xl'}`}>
-          Claude Monitor
+          Eyes on Claude Code
         </h1>
       </div>
       <div

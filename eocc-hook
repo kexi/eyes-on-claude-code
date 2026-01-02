@@ -1,15 +1,15 @@
 #!/bin/bash
-# claude-monitor-hook - グローバルイベント監視スクリプト
-# 
-# Usage: claude-monitor-hook <event_type> [matcher]
-# 
+# eocc-hook - Eyes on Claude Code イベント監視スクリプト
+#
+# Usage: eocc-hook <event_type> [matcher]
+#
 # このスクリプトは ~/.claude/settings.json から呼び出され、
 # 全てのClaude Codeセッションからのイベントをログに記録します。
 
 set -euo pipefail
 
 # ログディレクトリ
-LOG_DIR="${HOME}/.claude-monitor/logs"
+LOG_DIR="${HOME}/.eocc/logs"
 LOG_FILE="${LOG_DIR}/events.jsonl"
 LATEST_FILE="${LOG_DIR}/latest.json"
 

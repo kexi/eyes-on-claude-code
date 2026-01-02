@@ -4,9 +4,9 @@ local_*
 .DS_Store
 
 # Tauri build artifacts
-claude-monitor-tauri/src-tauri/target/
-claude-monitor-tauri/node_modules/
-claude-monitor-tauri/dist/
+app/src-tauri/target/
+app/node_modules/
+app/dist/
 
 # IDE
 .idea/

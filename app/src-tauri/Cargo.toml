@@ -1,5 +1,5 @@
 [package]
-name = "claude-monitor"
+name = "eyes-on-claude-code"
 version = "1.0.0"
 edition = "2021"
 

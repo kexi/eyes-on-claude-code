@@ -1,18 +1,18 @@
-# Claude Monitor - プロトタイプ
+# Eyes on Claude Code
 
-グローバルHooksを使用して、全てのClaude Codeセッションからのイベントを監視するプロトタイプです。
+グローバルHooksを使用して、全てのClaude Codeセッションからのイベントを監視するデスクトップアプリです。
 
 ## ファイル構成
 
 ```
 ~/.local/bin/
-  └── claude-monitor-hook    # Hookスクリプト（イベント受信・ログ記録）
-  └── claude-monitor-watch   # ログ監視スクリプト
+  └── eocc-hook    # Hookスクリプト（イベント受信・ログ記録）
+  └── eocc-watch   # ログ監視スクリプト
 
 ~/.claude/
   └── settings.json          # グローバルHooks設定
 
-~/.claude-monitor/
+~/.eocc/
   └── logs/
       ├── events.jsonl       # イベントログ（JSONL形式）
       ├── console.log        # 人間可読ログ
@@ -25,15 +25,15 @@
 
 ```bash
 # ディレクトリ作成
-mkdir -p ~/.local/bin ~/.claude-monitor/logs
+mkdir -p ~/.local/bin ~/.eocc/logs
 
 # スクリプトをコピー（このファイルと同じディレクトリにある場合）
-cp claude-monitor-hook ~/.local/bin/
-cp claude-monitor-watch ~/.local/bin/
+cp eocc-hook ~/.local/bin/
+cp eocc-watch ~/.local/bin/
 
 # 実行権限を付与
-chmod +x ~/.local/bin/claude-monitor-hook
-chmod +x ~/.local/bin/claude-monitor-watch
+chmod +x ~/.local/bin/eocc-hook
+chmod +x ~/.local/bin/eocc-watch
 
 # PATHに追加（必要に応じて）
 echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.zshrc
@@ -44,7 +44,7 @@ source ~/.zshrc
 
 **既存の設定がない場合:**
 ```bash
-cp claude-monitor-settings.json ~/.claude/settings.json
+cp eocc-settings.json ~/.claude/settings.json
 ```
 
 **既存の設定がある場合:**
@@ -73,10 +73,10 @@ claude
 
 ```bash
 # リアルタイム監視
-claude-monitor-watch
+eocc-watch
 
 # または直接tail
-tail -f ~/.claude-monitor/logs/console.log
+tail -f ~/.eocc/logs/console.log
 ```
 
 ## 使い方
@@ -85,36 +85,36 @@ tail -f ~/.claude-monitor/logs/console.log
 
 ```bash
 # リアルタイム監視（デフォルト）
-claude-monitor-watch
+eocc-watch
 
 # 最新20行を表示
-claude-monitor-watch -n 20
+eocc-watch -n 20
 
 # JSON形式で表示
-claude-monitor-watch -n 10 -j
+eocc-watch -n 10 -j
 
 # サマリー表示
-claude-monitor-watch -s
+eocc-watch -s
 ```
 
 ### ログファイル直接参照
 
 ```bash
 # 人間可読ログ
-cat ~/.claude-monitor/logs/console.log
+cat ~/.eocc/logs/console.log
 
 # JSONログ（jqで整形）
-cat ~/.claude-monitor/logs/events.jsonl | jq '.'
+cat ~/.eocc/logs/events.jsonl | jq '.'
 
 # 最新イベント
-cat ~/.claude-monitor/logs/latest.json | jq '.'
+cat ~/.eocc/logs/latest.json | jq '.'
 ```
 
 ### ログのクリア
 
 ```bash
 # 全ログをクリア
-rm -f ~/.claude-monitor/logs/*.jsonl ~/.claude-monitor/logs/*.log ~/.claude-monitor/logs/*.json
+rm -f ~/.eocc/logs/*.jsonl ~/.eocc/logs/*.log ~/.eocc/logs/*.json
 ```
 
 ## イベントタイプ
@@ -156,21 +156,21 @@ rm -f ~/.claude-monitor/logs/*.jsonl ~/.claude-monitor/logs/*.log ~/.claude-moni
 
 1. Claude Codeで `/hooks` コマンドを実行して設定を確認
 2. 設定ファイルのJSONが有効か確認: `jq '.' ~/.claude/settings.json`
-3. スクリプトの実行権限を確認: `ls -la ~/.local/bin/claude-monitor-*`
+3. スクリプトの実行権限を確認: `ls -la ~/.local/bin/eocc-*`
 
 ### ログが記録されない場合
 
-1. ログディレクトリの存在確認: `ls -la ~/.claude-monitor/logs/`
+1. ログディレクトリの存在確認: `ls -la ~/.eocc/logs/`
 2. 手動でスクリプトをテスト:
    ```bash
    echo '{"session_id":"test","message":"test message"}' | \
-     CLAUDE_PROJECT_DIR=/tmp/test ~/.local/bin/claude-monitor-hook notification permission_prompt
-   cat ~/.claude-monitor/logs/latest.json
+     CLAUDE_PROJECT_DIR=/tmp/test ~/.local/bin/eocc-hook notification permission_prompt
+   cat ~/.eocc/logs/latest.json
    ```
 
 ## デスクトップアプリ (Tauri)
 
-`claude-monitor-tauri/` にメニューバー常駐アプリがあります。
+`app/` にメニューバー常駐アプリがあります。
 
 ### 機能
 
@@ -193,7 +193,7 @@ curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 source "$HOME/.cargo/env"
 
 # プロジェクトディレクトリに移動
-cd claude-monitor-tauri
+cd app
 
 # 依存関係インストール
 npm install
@@ -205,7 +205,7 @@ npm install
 # Cargo を PATH に追加（シェル起動時に自動で追加されない場合）
 source "$HOME/.cargo/env"
 
-cd claude-monitor-tauri
+cd app
 npm run dev
 ```
 
@@ -213,19 +213,19 @@ npm run dev
 
 ```bash
 source "$HOME/.cargo/env"
-cd claude-monitor-tauri
+cd app
 npm run build
 
 # 成果物
-# - src-tauri/target/release/bundle/macos/Claude Monitor.app
-# - src-tauri/target/release/bundle/dmg/Claude Monitor_1.0.0_aarch64.dmg
+# - src-tauri/target/release/bundle/macos/Eyes on Claude Code.app
+# - src-tauri/target/release/bundle/dmg/Eyes on Claude Code_1.0.0_aarch64.dmg
 ```
 
 ### 動作確認手順
 
 1. **アプリを起動**
    ```bash
-   open src-tauri/target/release/bundle/macos/Claude\ Monitor.app
+   open src-tauri/target/release/bundle/macos/Eyes\ on\ Claude\ Code.app
    ```
 
 2. **テストイベントを送信**
@@ -233,22 +233,22 @@ npm run build
    # セッション開始
    echo '{"session_id": "test-001"}' | \
      CLAUDE_PROJECT_DIR="/path/to/project" \
-     ~/.local/bin/claude-monitor-hook session_start startup
+     ~/.local/bin/eocc-hook session_start startup
 
    # permission待ち（アイコンがオレンジに変化）
    echo '{"session_id": "test-001", "notification_type": "permission_prompt"}' | \
      CLAUDE_PROJECT_DIR="/path/to/project" \
-     ~/.local/bin/claude-monitor-hook notification permission_prompt
+     ~/.local/bin/eocc-hook notification permission_prompt
 
    # 完了（アイコンがグレーに戻る）
    echo '{"session_id": "test-001"}' | \
      CLAUDE_PROJECT_DIR="/path/to/project" \
-     ~/.local/bin/claude-monitor-hook stop
+     ~/.local/bin/eocc-hook stop
 
    # セッション終了
    echo '{"session_id": "test-001"}' | \
      CLAUDE_PROJECT_DIR="/path/to/project" \
-     ~/.local/bin/claude-monitor-hook session_end
+     ~/.local/bin/eocc-hook session_end
    ```
 
 3. **メニューバーで確認**
@@ -258,8 +258,8 @@ npm run build
 ### ログファイルのリセット
 
 ```bash
-rm ~/.claude-monitor/logs/events.jsonl
-touch ~/.claude-monitor/logs/events.jsonl
+rm ~/.eocc/logs/events.jsonl
+touch ~/.eocc/logs/events.jsonl
 ```
 
 ### インストール
@@ -269,9 +269,9 @@ touch ~/.claude-monitor/logs/events.jsonl
 ./install.sh
 
 # または手動で ~/Applications にコピー
-cp -r claude-monitor-tauri/src-tauri/target/release/bundle/macos/Claude\ Monitor.app ~/Applications/
+cp -r app/src-tauri/target/release/bundle/macos/Eyes\ on\ Claude\ Code.app ~/Applications/
 ```
 
 ### ログイン時に自動起動
 
-システム設定 > 一般 > ログイン項目 に `Claude Monitor.app` を追加
+システム設定 > 一般 > ログイン項目 に `Eyes on Claude Code.app` を追加

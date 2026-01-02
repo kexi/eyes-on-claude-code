@@ -6,7 +6,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "~/.local/bin/claude-monitor-hook notification permission_prompt"
+            "command": "~/.local/bin/eocc-hook notification permission_prompt"
           }
         ]
       },
@@ -15,7 +15,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "~/.local/bin/claude-monitor-hook notification idle_prompt"
+            "command": "~/.local/bin/eocc-hook notification idle_prompt"
           }
         ]
       }
@@ -25,7 +25,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "~/.local/bin/claude-monitor-hook stop"
+            "command": "~/.local/bin/eocc-hook stop"
           }
         ]
       }
@@ -36,7 +36,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "~/.local/bin/claude-monitor-hook session_start startup"
+            "command": "~/.local/bin/eocc-hook session_start startup"
           }
         ]
       },
@@ -45,7 +45,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "~/.local/bin/claude-monitor-hook session_start resume"
+            "command": "~/.local/bin/eocc-hook session_start resume"
           }
         ]
       }
@@ -55,7 +55,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "~/.local/bin/claude-monitor-hook session_end"
+            "command": "~/.local/bin/eocc-hook session_end"
           }
         ]
       }
