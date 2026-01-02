@@ -99,7 +99,10 @@ fn create_dashboard_window(
 
 fn start_file_watcher(app_handle: tauri::AppHandle, state: Arc<Mutex<AppState>>) {
     std::thread::spawn(move || {
-        let log_dir = get_log_dir();
+        let Some(log_dir) = get_log_dir() else {
+            eprintln!("[claude-monitor] Cannot start file watcher: home directory not found");
+            return;
+        };
         if let Err(e) = fs::create_dir_all(&log_dir) {
             eprintln!("[claude-monitor] Failed to create log directory: {:?}", e);
             return;
@@ -144,7 +147,11 @@ fn start_file_watcher(app_handle: tauri::AppHandle, state: Arc<Mutex<AppState>>)
 }
 
 fn load_existing_events(state: &mut AppState) {
-    let events_file = get_events_file();
+    let Some(events_file) = get_events_file() else {
+        eprintln!("[claude-monitor] Cannot load events: home directory not found");
+        return;
+    };
+
     if events_file.exists() {
         if let Ok(content) = fs::read_to_string(&events_file) {
             for line in content.lines() {
@@ -253,47 +260,65 @@ fn main() {
                         show_dashboard(app);
                     }
                     "always_on_top" => {
-                        if let Ok(mut state_guard) = state_for_tray.lock() {
-                            toggle_always_on_top(app, &mut state_guard);
-                            update_tray_and_badge(app, &state_guard);
+                        match state_for_tray.lock() {
+                            Ok(mut state_guard) => {
+                                toggle_always_on_top(app, &mut state_guard);
+                                update_tray_and_badge(app, &state_guard);
+                            }
+                            Err(e) => eprintln!("[claude-monitor] Failed to acquire lock for always_on_top: {:?}", e),
                         }
                     }
                     "mini_view" => {
-                        if let Ok(mut state_guard) = state_for_tray.lock() {
-                            toggle_mini_view(app, &mut state_guard);
-                            update_tray_and_badge(app, &state_guard);
+                        match state_for_tray.lock() {
+                            Ok(mut state_guard) => {
+                                toggle_mini_view(app, &mut state_guard);
+                                update_tray_and_badge(app, &state_guard);
+                            }
+                            Err(e) => eprintln!("[claude-monitor] Failed to acquire lock for mini_view: {:?}", e),
                         }
                     }
                     "sound_enabled" => {
-                        if let Ok(mut state_guard) = state_for_tray.lock() {
-                            state_guard.settings.sound_enabled = !state_guard.settings.sound_enabled;
-                            save_settings(&state_guard.settings);
-                            let _ = app.emit("settings-updated", &state_guard.settings);
-                            update_tray_and_badge(app, &state_guard);
+                        match state_for_tray.lock() {
+                            Ok(mut state_guard) => {
+                                state_guard.settings.sound_enabled = !state_guard.settings.sound_enabled;
+                                save_settings(&state_guard.settings);
+                                let _ = app.emit("settings-updated", &state_guard.settings);
+                                update_tray_and_badge(app, &state_guard);
+                            }
+                            Err(e) => eprintln!("[claude-monitor] Failed to acquire lock for sound_enabled: {:?}", e),
                         }
                     }
                     "open_logs" => {
-                        let log_dir = get_log_dir();
-                        let _ = opener::open(&log_dir);
+                        if let Some(log_dir) = get_log_dir() {
+                            let _ = opener::open(&log_dir);
+                        } else {
+                            eprintln!("[claude-monitor] Cannot open logs: home directory not found");
+                        }
                     }
                     "clear_sessions" => {
-                        if let Ok(mut state_guard) = state_for_tray.lock() {
-                            state_guard.sessions.clear();
-                            update_tray_and_badge(app, &state_guard);
-                            emit_state_update(app, &state_guard);
+                        match state_for_tray.lock() {
+                            Ok(mut state_guard) => {
+                                state_guard.sessions.clear();
+                                update_tray_and_badge(app, &state_guard);
+                                emit_state_update(app, &state_guard);
+                            }
+                            Err(e) => eprintln!("[claude-monitor] Failed to acquire lock for clear_sessions: {:?}", e),
                         }
                     }
                     other => {
                         if let Some((is_active, opacity)) = parse_opacity_menu_id(other) {
-                            if let Ok(mut state_guard) = state_for_tray.lock() {
-                                if is_active {
-                                    state_guard.settings.opacity_active = opacity;
-                                } else {
-                                    state_guard.settings.opacity_inactive = opacity;
+                            match state_for_tray.lock() {
+                                Ok(mut state_guard) => {
+                                    if is_active {
+                                        state_guard.settings.opacity_active = opacity;
+                                    } else {
+                                        state_guard.settings.opacity_inactive = opacity;
+                                    }
+                                    save_settings(&state_guard.settings);
+                                    let _ = app.emit("settings-updated", &state_guard.settings);
+                                    update_tray_and_badge(app, &state_guard);
                                 }
-                                save_settings(&state_guard.settings);
-                                let _ = app.emit("settings-updated", &state_guard.settings);
-                                update_tray_and_badge(app, &state_guard);
+                                Err(e) => eprintln!("[claude-monitor] Failed to acquire lock for opacity: {:?}", e),
                             }
                         }
                     }

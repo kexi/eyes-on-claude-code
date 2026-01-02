@@ -62,8 +62,11 @@ pub fn process_event(state: &mut AppState, event: EventInfo) {
 }
 
 pub fn read_new_events(state: &mut AppState) -> Vec<EventInfo> {
-    let events_file = get_events_file();
     let mut new_events = Vec::new();
+
+    let Some(events_file) = get_events_file() else {
+        return new_events;
+    };
 
     if !events_file.exists() {
         return new_events;
