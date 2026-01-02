@@ -29,6 +29,11 @@ export const SessionCard = ({ session, isMiniView }: SessionCardProps) => {
     setIsExpanded(!isExpanded);
   };
 
+  // Reset git info when session event changes (e.g., after commit)
+  useEffect(() => {
+    setGitInfo(null);
+  }, [session.last_event]);
+
   // Load git info when expanded
   useEffect(() => {
     if (isExpanded && !gitInfo && !isLoadingGit) {
