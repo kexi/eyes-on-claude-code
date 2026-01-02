@@ -26,7 +26,7 @@ use constants::{
     ICON_NORMAL, MINI_VIEW_HEIGHT, MINI_VIEW_WIDTH, NORMAL_VIEW_HEIGHT, NORMAL_VIEW_WIDTH,
 };
 use events::{process_event, read_new_events};
-use menu::{build_menu, parse_opacity_menu_id};
+use menu::{build_app_menu, build_tray_menu, parse_opacity_menu_id};
 use settings::{get_events_file, get_log_dir, load_settings, save_settings};
 use state::{AppState, EventInfo, ManagedState};
 use tray::{emit_state_update, update_tray_and_badge};
@@ -236,31 +236,25 @@ fn main() {
                 }
             });
 
-            // Build initial menu
-            let (menu, _, _) = {
+            // Build app menu bar
+            let state_for_app_menu = Arc::clone(&state_clone);
+            let app_menu = {
                 let state_guard = state_for_tray
                     .lock()
                     .map_err(|_| tauri::Error::Anyhow(anyhow::anyhow!("Failed to acquire state lock")))?;
-                build_menu(&app_handle, &state_guard)?
+                build_app_menu(&app_handle, &state_guard)?
             };
 
-            let initial_icon = Image::from_bytes(ICON_NORMAL)?;
-
-            // Create tray icon
-            let _tray = TrayIconBuilder::with_id("main")
-                .icon(initial_icon)
-                .menu(&menu)
-                .show_menu_on_left_click(true)
-                .tooltip("Claude Monitor")
-                .on_menu_event(move |app, event| match event.id.as_ref() {
-                    "quit" => {
-                        app.exit(0);
-                    }
+            // Set app menu and handle events
+            app.set_menu(app_menu)?;
+            app.on_menu_event(move |app, event| {
+                let state = &state_for_app_menu;
+                match event.id.as_ref() {
                     "open_dashboard" => {
                         show_dashboard(app);
                     }
                     "always_on_top" => {
-                        match state_for_tray.lock() {
+                        match state.lock() {
                             Ok(mut state_guard) => {
                                 toggle_always_on_top(app, &mut state_guard);
                                 update_tray_and_badge(app, &state_guard);
@@ -269,7 +263,7 @@ fn main() {
                         }
                     }
                     "mini_view" => {
-                        match state_for_tray.lock() {
+                        match state.lock() {
                             Ok(mut state_guard) => {
                                 toggle_mini_view(app, &mut state_guard);
                                 update_tray_and_badge(app, &state_guard);
@@ -278,7 +272,7 @@ fn main() {
                         }
                     }
                     "sound_enabled" => {
-                        match state_for_tray.lock() {
+                        match state.lock() {
                             Ok(mut state_guard) => {
                                 state_guard.settings.sound_enabled = !state_guard.settings.sound_enabled;
                                 save_settings(&state_guard.settings);
@@ -287,6 +281,46 @@ fn main() {
                             }
                             Err(e) => eprintln!("[claude-monitor] Failed to acquire lock for sound_enabled: {:?}", e),
                         }
+                    }
+                    other => {
+                        if let Some((is_active, opacity)) = parse_opacity_menu_id(other) {
+                            match state.lock() {
+                                Ok(mut state_guard) => {
+                                    if is_active {
+                                        state_guard.settings.opacity_active = opacity;
+                                    } else {
+                                        state_guard.settings.opacity_inactive = opacity;
+                                    }
+                                    save_settings(&state_guard.settings);
+                                    let _ = app.emit("settings-updated", &state_guard.settings);
+                                    update_tray_and_badge(app, &state_guard);
+                                }
+                                Err(e) => eprintln!("[claude-monitor] Failed to acquire lock for opacity: {:?}", e),
+                            }
+                        }
+                    }
+                }
+            });
+
+            // Build tray menu
+            let tray_menu = {
+                let state_guard = state_for_tray
+                    .lock()
+                    .map_err(|_| tauri::Error::Anyhow(anyhow::anyhow!("Failed to acquire state lock")))?;
+                build_tray_menu(&app_handle, &state_guard)?
+            };
+
+            let initial_icon = Image::from_bytes(ICON_NORMAL)?;
+
+            // Create tray icon
+            let _tray = TrayIconBuilder::with_id("main")
+                .icon(initial_icon)
+                .menu(&tray_menu)
+                .show_menu_on_left_click(true)
+                .tooltip("Claude Monitor")
+                .on_menu_event(move |app, event| match event.id.as_ref() {
+                    "open_dashboard" => {
+                        show_dashboard(app);
                     }
                     "open_logs" => {
                         if let Some(log_dir) = get_log_dir() {
@@ -305,23 +339,7 @@ fn main() {
                             Err(e) => eprintln!("[claude-monitor] Failed to acquire lock for clear_sessions: {:?}", e),
                         }
                     }
-                    other => {
-                        if let Some((is_active, opacity)) = parse_opacity_menu_id(other) {
-                            match state_for_tray.lock() {
-                                Ok(mut state_guard) => {
-                                    if is_active {
-                                        state_guard.settings.opacity_active = opacity;
-                                    } else {
-                                        state_guard.settings.opacity_inactive = opacity;
-                                    }
-                                    save_settings(&state_guard.settings);
-                                    let _ = app.emit("settings-updated", &state_guard.settings);
-                                    update_tray_and_badge(app, &state_guard);
-                                }
-                                Err(e) => eprintln!("[claude-monitor] Failed to acquire lock for opacity: {:?}", e),
-                            }
-                        }
-                    }
+                    _ => {}
                 })
                 .on_tray_icon_event(|_tray, event| {
                     if let TrayIconEvent::Click {

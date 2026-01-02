@@ -1,7 +1,7 @@
 use tauri::{
     menu::{
-        CheckMenuItem, CheckMenuItemBuilder, Menu, MenuItem, MenuItemBuilder, PredefinedMenuItem,
-        Submenu, SubmenuBuilder,
+        AboutMetadata, CheckMenuItemBuilder, Menu, MenuBuilder, MenuItem, MenuItemBuilder,
+        PredefinedMenuItem, Submenu, SubmenuBuilder,
     },
     Runtime,
 };
@@ -52,6 +52,71 @@ fn build_opacity_submenu<R: Runtime>(
         .item(&MenuItemBuilder::with_id("opacity_active_90", "  90%").build(app)?)
         .item(&MenuItemBuilder::with_id("opacity_active_100", "  100%").build(app)?)
         .build()
+}
+
+/// Build the application menu bar
+///
+/// Structure:
+/// - Claude Monitor: About, Quit
+/// - View: Mini View
+/// - Window: Open Dashboard, Always on Top, Opacity, Sound
+pub fn build_app_menu<R: Runtime>(
+    app: &tauri::AppHandle<R>,
+    state: &AppState,
+) -> tauri::Result<Menu<R>> {
+    // Claude Monitor menu (app menu)
+    let app_menu = SubmenuBuilder::new(app, "Claude Monitor")
+        .about(Some(AboutMetadata {
+            name: Some("Claude Monitor".to_string()),
+            version: Some("1.0.0".to_string()),
+            ..Default::default()
+        }))
+        .separator()
+        .quit()
+        .build()?;
+
+    // View menu
+    let mini_view = CheckMenuItemBuilder::with_id("mini_view", "Mini View")
+        .checked(state.settings.mini_view)
+        .accelerator("CmdOrCtrl+M")
+        .build(app)?;
+
+    let view_menu = SubmenuBuilder::new(app, "View")
+        .item(&mini_view)
+        .build()?;
+
+    // Window menu
+    let open_dashboard = MenuItemBuilder::with_id("open_dashboard", "Open Dashboard")
+        .accelerator("CmdOrCtrl+D")
+        .build(app)?;
+
+    let always_on_top = CheckMenuItemBuilder::with_id("always_on_top", "Always on Top")
+        .checked(state.settings.always_on_top)
+        .accelerator("CmdOrCtrl+T")
+        .build(app)?;
+
+    let opacity_submenu = build_opacity_submenu(app, &state.settings)?;
+
+    let sound_enabled = CheckMenuItemBuilder::with_id("sound_enabled", "Sound")
+        .checked(state.settings.sound_enabled)
+        .build(app)?;
+
+    let window_menu = SubmenuBuilder::new(app, "Window")
+        .item(&open_dashboard)
+        .separator()
+        .item(&always_on_top)
+        .item(&opacity_submenu)
+        .item(&sound_enabled)
+        .build()?;
+
+    // Build the menu bar
+    let menu = MenuBuilder::new(app)
+        .item(&app_menu)
+        .item(&view_menu)
+        .item(&window_menu)
+        .build()?;
+
+    Ok(menu)
 }
 
 fn build_session_items<R: Runtime>(
@@ -120,10 +185,11 @@ fn build_events_submenu<R: Runtime>(
     Ok(Some(submenu_builder.build()?))
 }
 
-pub fn build_menu<R: Runtime>(
+/// Build the tray menu (shows sessions and events status)
+pub fn build_tray_menu<R: Runtime>(
     app: &tauri::AppHandle<R>,
     state: &AppState,
-) -> tauri::Result<(Menu<R>, CheckMenuItem<R>, CheckMenuItem<R>)> {
+) -> tauri::Result<Menu<R>> {
     // Header
     let waiting_count = state
         .sessions
@@ -145,23 +211,6 @@ pub fn build_menu<R: Runtime>(
         .enabled(false)
         .build(app)?;
 
-    // Settings items
-    let open_dashboard = MenuItemBuilder::with_id("open_dashboard", "Open Dashboard").build(app)?;
-
-    let always_on_top = CheckMenuItemBuilder::with_id("always_on_top", "Always on Top")
-        .checked(state.settings.always_on_top)
-        .build(app)?;
-
-    let mini_view = CheckMenuItemBuilder::with_id("mini_view", "Mini View")
-        .checked(state.settings.mini_view)
-        .build(app)?;
-
-    let sound_enabled = CheckMenuItemBuilder::with_id("sound_enabled", "Sound")
-        .checked(state.settings.sound_enabled)
-        .build(app)?;
-
-    let opacity_submenu = build_opacity_submenu(app, &state.settings)?;
-
     // Session items
     let session_items = build_session_items(app, &state.sessions)?;
 
@@ -169,23 +218,15 @@ pub fn build_menu<R: Runtime>(
     let events_submenu = build_events_submenu(app, &state.recent_events)?;
 
     // Footer items
+    let open_dashboard = MenuItemBuilder::with_id("open_dashboard", "Open Dashboard").build(app)?;
     let open_logs = MenuItemBuilder::with_id("open_logs", "Open Log Folder").build(app)?;
     let clear_sessions = MenuItemBuilder::with_id("clear_sessions", "Clear Sessions").build(app)?;
-    let quit = MenuItemBuilder::with_id("quit", "Quit")
-        .accelerator("CmdOrCtrl+Q")
-        .build(app)?;
 
     // Build menu
     let menu = Menu::with_items(
         app,
         &[
             &header,
-            &PredefinedMenuItem::separator(app)?,
-            &open_dashboard,
-            &always_on_top,
-            &mini_view,
-            &sound_enabled,
-            &opacity_submenu,
             &PredefinedMenuItem::separator(app)?,
         ],
     )?;
@@ -203,10 +244,10 @@ pub fn build_menu<R: Runtime>(
         menu.append(&PredefinedMenuItem::separator(app)?)?;
     }
 
+    menu.append(&open_dashboard)?;
     menu.append(&open_logs)?;
     menu.append(&clear_sessions)?;
-    menu.append(&PredefinedMenuItem::separator(app)?)?;
-    menu.append(&quit)?;
 
-    Ok((menu, always_on_top, mini_view))
+    Ok(menu)
 }
+

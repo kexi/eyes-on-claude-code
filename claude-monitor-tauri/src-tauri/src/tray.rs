@@ -1,12 +1,12 @@
 use tauri::{Emitter, Manager};
 
-use crate::menu::build_menu;
+use crate::menu::build_tray_menu;
 use crate::state::AppState;
 
 pub fn update_tray_and_badge(app: &tauri::AppHandle, state: &AppState) {
     // Update tray menu
     if let Some(tray) = app.tray_by_id("main") {
-        if let Ok((new_menu, _, _)) = build_menu(app, state) {
+        if let Ok(new_menu) = build_tray_menu(app, state) {
             let _ = tray.set_menu(Some(new_menu));
         }
 
