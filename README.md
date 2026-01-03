@@ -17,31 +17,13 @@ Claude Code の **グローバルHooks** からイベントを収集し、複数
 
 初回起動時にはアプリケーション上にhooksの設定のインストラクションが表示されます。
 
-
-
-アプリは起動時に次を自動で行います。
-
-- Hookスクリプトの配置（アプリのデータ領域に書き込み）
-- `~/.local/bin/eocc-hook` を作成（シンボリックリンク。パスにスペースが入るのを避けるため）
-- ログディレクトリ作成: `~/.eocc/logs/`
-- 空のイベントファイル作成: `~/.eocc/logs/events.jsonl`
-
-初回は **Setupモーダル** が表示されます。
-
-[screenshot_Setup Requiredモーダル（Copy / Open settings.json / Check Again）]
+![hooks](https://github.com/user-attachments/assets/7b657f43-584a-4f57-83cd-d9587558d519)
 
 Setupモーダルの指示に従って、生成された設定を `~/.claude/settings.json` に反映してください。
 
-- Setupモーダルは既存設定を読み込み、**hooksだけを差し替える** JSON を生成します（古い eocc hooks は置換され、他のhooks/設定は保持されます）。
-- 反映後に **Check Again** を押してOKになれば完了です。
 
-### Claude Code側の再起動
-
-Hooksは起動時に読み込まれるため、設定変更後は **Claude Codeセッションを再起動**してください。
-
-```bash
-claude
-```
+> [!Note]
+> Setupモーダル上で表示されているJSONは既存設定を読み込み、**hooksだけを差し替える** JSON を生成します（古い eocc hooks は置換され、他のhooks/設定は保持されます）。
 
 ### 生成されるファイル/保存先
 
@@ -56,10 +38,7 @@ claude
 
 ~/.eocc/
   └── logs/
-      ├── events.jsonl       # イベントログ（JSONL）
-      ├── console.log        # 人間向けログ（1行1イベント）
-      ├── latest.json        # 最新イベント（デバッグ用）
-      └── stdin-debug.log    # Hook stdin 入力ログ（デバッグ用）
+      └── events.jsonl       # イベントキュー（アプリ処理後に削除される）
 ```
 
 **アプリ設定**

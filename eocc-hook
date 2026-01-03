@@ -15,11 +15,6 @@ function isoTimestampUtc() {
   return new Date().toISOString();
 }
 
-function localTimeHHMMSS(d = new Date()) {
-  const pad = (n) => String(n).padStart(2, "0");
-  return `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
-}
-
 function basename(p) {
   const clean = String(p || "").replace(/\/+$/, "");
   return clean ? path.basename(clean) : "";
@@ -43,21 +38,6 @@ function getString(obj, key, fallback = "") {
   return fallback;
 }
 
-function getEmoji(eventType, notificationType) {
-  if (eventType === "notification") {
-    if (notificationType === "permission_prompt") return "🔐";
-    if (notificationType === "idle_prompt") return "⏳";
-    return "🔔";
-  }
-  if (eventType === "stop") return "✅";
-  if (eventType === "session_start") return "🚀";
-  if (eventType === "session_end") return "🏁";
-  if (eventType === "pre_tool_use") return "🔧";
-  if (eventType === "post_tool_use") return "🔧";
-  if (eventType === "user_prompt_submit") return "💬";
-  return "📌";
-}
-
 async function readStdin() {
   if (process.stdin.isTTY) return "{}";
   const chunks = [];
@@ -70,10 +50,6 @@ function appendLine(filePath, line) {
   fs.appendFileSync(filePath, line + "\n", { encoding: "utf8" });
 }
 
-function writeFile(filePath, content) {
-  fs.writeFileSync(filePath, content, { encoding: "utf8" });
-}
-
 async function main() {
   const eventType = process.argv[2] || "unknown";
   const matcher = process.argv[3] || "";
@@ -81,9 +57,6 @@ async function main() {
   const home = os.homedir();
   const logDir = path.join(home, ".eocc", "logs");
   const logFile = path.join(logDir, "events.jsonl");
-  const latestFile = path.join(logDir, "latest.json");
-  const consoleLog = path.join(logDir, "console.log");
-  const stdinDebugLog = path.join(logDir, "stdin-debug.log");
 
   fs.mkdirSync(logDir, { recursive: true });
 
@@ -104,13 +77,6 @@ async function main() {
   }
 
   const timestamp = isoTimestampUtc();
-  const timestampLocal = localTimeHHMMSS();
-
-  // Debug: save raw stdin input
-  appendLine(
-    stdinDebugLog,
-    `[${timestamp}] EVENT=${eventType} MATCHER=${matcher} INPUT=${inputText}`
-  );
 
   const payload = {
     timestamp,
@@ -128,15 +94,6 @@ async function main() {
   const payloadJson = JSON.stringify(payload);
 
   appendLine(logFile, payloadJson);
-  writeFile(latestFile, payloadJson);
-
-  const emoji = getEmoji(eventType, notificationType);
-  const matcherSuffix = matcher ? ` (${matcher})` : "";
-  const messageSuffix = message ? ` - ${message}` : "";
-  appendLine(
-    consoleLog,
-    `[${timestampLocal}] ${emoji} ${projectName}: ${eventType}${matcherSuffix}${messageSuffix}`
-  );
 }
 
 main().catch(() => {
