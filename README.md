@@ -1,13 +1,12 @@
 # Eyes on Claude Code
 
-グローバルHooksを使用して、全てのClaude Codeセッションからのイベントを監視するデスクトップアプリです。
+グローバルHooksを使用して、全てのClaude Codeセッションからのイベントを監視するメニューバー常駐（Tauri）アプリです。
 
 ## ファイル構成
 
 ```
 ~/.local/bin/
-  └── eocc-hook    # Hookスクリプト（イベント受信・ログ記録）
-  └── eocc-watch   # ログ監視スクリプト
+  └── eocc-hook            # Hookスクリプト（アプリが自動配置するシンボリックリンク）
 
 ~/.claude/
   └── settings.json          # グローバルHooks設定
@@ -17,38 +16,40 @@
       ├── events.jsonl       # イベントログ（JSONL形式）
       ├── console.log        # 人間可読ログ
       └── latest.json        # 最新イベント（デバッグ用）
+      └── stdin-debug.log    # Hookのstdin入力デバッグ（必要時のみ）
 ```
 
 ## セットアップ手順
 
-### 1. スクリプトをインストール
+### 事前要件
+
+- `jq`（必須。Hookが `events.jsonl` を生成するために使用します）
+  - macOS: `brew install jq`
+
+### 1. Hookをインストール（推奨：アプリ経由）
+
+アプリ起動時に Hook を自動インストールし、`~/.local/bin/eocc-hook` を作成（シンボリックリンク）します。
+
+1. `app/` から開発起動 or ビルド済みアプリを起動
+2. 初回は Setup モーダルが表示されるので、生成された設定を `~/.claude/settings.json` に反映
+
+### 2. グローバルHooks設定を適用（手動で行う場合）
 
 ```bash
-# ディレクトリ作成
-mkdir -p ~/.local/bin ~/.eocc/logs
-
-# スクリプトをコピー（このファイルと同じディレクトリにある場合）
-cp eocc-hook ~/.local/bin/
-cp eocc-watch ~/.local/bin/
+# スクリプトをコピー（このリポジトリ直下にある場合）
+mkdir -p ~/.local/bin
+cp ./eocc-hook ~/.local/bin/eocc-hook
 
 # 実行権限を付与
 chmod +x ~/.local/bin/eocc-hook
-chmod +x ~/.local/bin/eocc-watch
 
 # PATHに追加（必要に応じて）
 echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.zshrc
 source ~/.zshrc
 ```
 
-### 2. グローバルHooks設定を適用
-
-**既存の設定がない場合:**
-```bash
-cp eocc-settings.json ~/.claude/settings.json
-```
-
-**既存の設定がある場合:**
-手動で `~/.claude/settings.json` に `hooks` セクションをマージしてください。
+`~/.claude/settings.json` に `hooks` セクションを追加/更新してください。
+（既存設定がある場合は、他の設定を壊さないようにマージしてください。アプリの Setup 画面は「既存設定 + hooks」をマージしたJSONを生成できます。）
 
 ```bash
 # 既存の設定を確認
@@ -72,30 +73,11 @@ claude
 別のターミナルでログを監視：
 
 ```bash
-# リアルタイム監視
-eocc-watch
-
-# または直接tail
+# 人間可読ログ
 tail -f ~/.eocc/logs/console.log
 ```
 
 ## 使い方
-
-### ログ監視
-
-```bash
-# リアルタイム監視（デフォルト）
-eocc-watch
-
-# 最新20行を表示
-eocc-watch -n 20
-
-# JSON形式で表示
-eocc-watch -n 10 -j
-
-# サマリー表示
-eocc-watch -s
-```
 
 ### ログファイル直接参照
 
@@ -124,6 +106,8 @@ rm -f ~/.eocc/logs/*.jsonl ~/.eocc/logs/*.log ~/.eocc/logs/*.json
 | `notification` (permission_prompt) | 🔐 | 許可待ち |
 | `notification` (idle_prompt) | ⏳ | 入力待ち（60秒以上アイドル） |
 | `stop` | ✅ | 応答完了 |
+| `post_tool_use` | 🔧 | ツール実行後（状態更新用） |
+| `user_prompt_submit` | 💬 | ユーザーがプロンプト送信 |
 | `session_start` | 🚀 | セッション開始 |
 | `session_end` | 🏁 | セッション終了 |
 
@@ -133,6 +117,8 @@ rm -f ~/.eocc/logs/*.jsonl ~/.eocc/logs/*.log ~/.eocc/logs/*.json
 ```
 [14:32:15] 🚀 my-project: session_start (startup)
 [14:32:45] 🔐 my-project: notification (permission_prompt) - Claude needs your permission to use Bash
+[14:32:58] 🔧 my-project: post_tool_use
+[14:33:00] 💬 my-project: user_prompt_submit
 [14:33:02] ✅ my-project: stop
 [14:35:10] 🏁 my-project: session_end
 ```
@@ -146,6 +132,9 @@ rm -f ~/.eocc/logs/*.jsonl ~/.eocc/logs/*.log ~/.eocc/logs/*.json
   "project_name": "my-project",
   "project_dir": "/Users/you/projects/my-project",
   "session_id": "abc123",
+  "message": "",
+  "notification_type": "",
+  "tool_name": "",
   "raw_input": { ... }
 }
 ```
@@ -155,8 +144,8 @@ rm -f ~/.eocc/logs/*.jsonl ~/.eocc/logs/*.log ~/.eocc/logs/*.json
 ### Hooksが動作しない場合
 
 1. Claude Codeで `/hooks` コマンドを実行して設定を確認
-2. 設定ファイルのJSONが有効か確認: `jq '.' ~/.claude/settings.json`
-3. スクリプトの実行権限を確認: `ls -la ~/.local/bin/eocc-*`
+2. スクリプトの実行権限を確認: `ls -la ~/.local/bin/eocc-hook`
+3. `jq` がインストールされているか確認: `command -v jq`
 
 ### ログが記録されない場合
 
@@ -176,14 +165,15 @@ rm -f ~/.eocc/logs/*.jsonl ~/.eocc/logs/*.log ~/.eocc/logs/*.json
 
 - メニューバーにアイコン表示
 - セッション状態のリアルタイム監視
-- waiting状態でアイコン色が変化（グレー → オレンジ）
+- waiting数をバッジ/ツールチップ/メニュー表示で通知
 - Recent Events サブメニュー
 - ログフォルダを開く機能
 
 ### 必要環境
 
 - Rust (rustup)
-- Node.js & npm
+- Node.js
+- pnpm（`tauri.conf.json` が `pnpm dev/build` を使用します）
 
 ### 開発環境セットアップ
 
@@ -196,7 +186,7 @@ source "$HOME/.cargo/env"
 cd app
 
 # 依存関係インストール
-npm install
+pnpm install
 ```
 
 ### 開発モードで起動
@@ -206,7 +196,7 @@ npm install
 source "$HOME/.cargo/env"
 
 cd app
-npm run dev
+pnpm dev
 ```
 
 ### リリースビルド
@@ -214,7 +204,7 @@ npm run dev
 ```bash
 source "$HOME/.cargo/env"
 cd app
-npm run build
+pnpm build
 
 # 成果物
 # - src-tauri/target/release/bundle/macos/Eyes on Claude Code.app
@@ -265,9 +255,6 @@ touch ~/.eocc/logs/events.jsonl
 ### インストール
 
 ```bash
-# install.sh を使用
-./install.sh
-
 # または手動で ~/Applications にコピー
 cp -r app/src-tauri/target/release/bundle/macos/Eyes\ on\ Claude\ Code.app ~/Applications/
 ```
