@@ -61,11 +61,12 @@ pub fn process_event(state: &mut AppState, event: EventInfo) {
     }
 }
 
-pub fn read_new_events(state: &mut AppState) -> Vec<EventInfo> {
+pub fn read_new_events(app: &tauri::AppHandle, state: &mut AppState) -> Vec<EventInfo> {
     let mut new_events = Vec::new();
 
-    let Some(events_file) = get_events_file() else {
-        return new_events;
+    let events_file = match get_events_file(app) {
+        Ok(path) => path,
+        Err(_) => return new_events,
     };
 
     if !events_file.exists() {

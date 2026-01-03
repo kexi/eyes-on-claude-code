@@ -1,7 +1,7 @@
 import { invoke } from '@tauri-apps/api/core';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 import { getCurrentWindow, getAllWindows } from '@tauri-apps/api/window';
-import type { DashboardData, DiffType, GitInfo, Settings } from '@/types';
+import type { DashboardData, DiffType, GitInfo, Settings, SetupStatus } from '@/types';
 
 // Commands
 export const getDashboardData = () => invoke<DashboardData>('get_dashboard_data');
@@ -15,6 +15,10 @@ export type { DiffType };
 
 export const openDiff = (projectDir: string, diffType: DiffType, baseBranch?: string) =>
   invoke('open_diff', { projectDir, diffType, baseBranch });
+
+// Setup commands
+export const getSetupStatus = () => invoke<SetupStatus>('get_setup_status');
+export const checkClaudeSettings = () => invoke<SetupStatus>('check_claude_settings');
 
 // Window operations
 export const getAppWindow = () => {

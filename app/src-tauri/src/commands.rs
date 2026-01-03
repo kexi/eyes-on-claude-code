@@ -6,6 +6,7 @@ use crate::constants::{MINI_VIEW_HEIGHT, MINI_VIEW_WIDTH, NORMAL_VIEW_HEIGHT, NO
 use crate::difit::{start_difit_server, DiffType, DifitProcessRegistry};
 use crate::git::{get_git_info, GitInfo};
 use crate::settings::save_settings;
+use crate::setup::{self, SetupStatus};
 use crate::state::{DashboardData, ManagedState, Settings};
 use crate::tray::{emit_state_update, update_tray_and_badge};
 
@@ -56,7 +57,7 @@ pub fn set_always_on_top(
 ) -> Result<(), String> {
     let mut state_guard = state.0.lock().map_err(|_| LOCK_ERROR)?;
     state_guard.settings.always_on_top = enabled;
-    save_settings(&state_guard.settings);
+    save_settings(&app, &state_guard.settings);
 
     if let Some(window) = app.get_webview_window("dashboard") {
         let _ = window.set_always_on_top(enabled);
@@ -80,7 +81,7 @@ pub fn set_mini_view(
 ) -> Result<(), String> {
     let mut state_guard = state.0.lock().map_err(|_| LOCK_ERROR)?;
     state_guard.settings.mini_view = enabled;
-    save_settings(&state_guard.settings);
+    save_settings(&app, &state_guard.settings);
 
     if let Some(window) = app.get_webview_window("dashboard") {
         let _ = window.set_decorations(!enabled);
@@ -106,10 +107,11 @@ pub fn get_settings(state: tauri::State<'_, ManagedState>) -> Result<Settings, S
 pub fn set_opacity_active(
     opacity: f64,
     state: tauri::State<'_, ManagedState>,
+    app: tauri::AppHandle,
 ) -> Result<(), String> {
     let mut state_guard = state.0.lock().map_err(|_| LOCK_ERROR)?;
     state_guard.settings.opacity_active = opacity.clamp(0.1, 1.0);
-    save_settings(&state_guard.settings);
+    save_settings(&app, &state_guard.settings);
     Ok(())
 }
 
@@ -117,10 +119,11 @@ pub fn set_opacity_active(
 pub fn set_opacity_inactive(
     opacity: f64,
     state: tauri::State<'_, ManagedState>,
+    app: tauri::AppHandle,
 ) -> Result<(), String> {
     let mut state_guard = state.0.lock().map_err(|_| LOCK_ERROR)?;
     state_guard.settings.opacity_inactive = opacity.clamp(0.1, 1.0);
-    save_settings(&state_guard.settings);
+    save_settings(&app, &state_guard.settings);
     Ok(())
 }
 
@@ -313,4 +316,31 @@ fn html_escape(s: &str) -> String {
         .replace('<', "&lt;")
         .replace('>', "&gt;")
         .replace('"', "&quot;")
+}
+
+// ============================================================================
+// Setup commands
+// ============================================================================
+
+/// Get the current setup status
+#[tauri::command]
+pub fn get_setup_status(app: tauri::AppHandle) -> SetupStatus {
+    setup::get_setup_status(&app)
+}
+
+/// Install the hook script to app data directory
+#[tauri::command]
+pub fn install_hook(app: tauri::AppHandle) -> Result<String, String> {
+    let path = setup::install_hook_script(&app)?;
+    Ok(path.to_string_lossy().to_string())
+}
+
+/// Check Claude settings and return merged settings if needed
+#[tauri::command]
+pub fn check_claude_settings(app: tauri::AppHandle) -> Result<SetupStatus, String> {
+    // Ensure hook is installed first
+    if !setup::is_hook_installed(&app) {
+        setup::install_hook_script(&app)?;
+    }
+    Ok(setup::get_setup_status(&app))
 }

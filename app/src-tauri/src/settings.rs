@@ -1,28 +1,38 @@
 use std::fs;
 use std::path::PathBuf;
+use tauri::Manager;
 
 use crate::state::Settings;
 
-pub fn get_config_dir() -> Option<PathBuf> {
-    dirs::home_dir().map(|home| home.join(".eocc"))
+/// Get the config directory using Tauri's path API
+pub fn get_config_dir(app: &tauri::AppHandle) -> Result<PathBuf, String> {
+    app.path()
+        .app_data_dir()
+        .map_err(|e| format!("Failed to get app data dir: {:?}", e))
 }
 
-pub fn get_log_dir() -> Option<PathBuf> {
-    get_config_dir().map(|dir| dir.join("logs"))
+/// Get the log directory using Tauri's path API
+pub fn get_log_dir(app: &tauri::AppHandle) -> Result<PathBuf, String> {
+    app.path()
+        .app_log_dir()
+        .map_err(|e| format!("Failed to get app log dir: {:?}", e))
 }
 
-pub fn get_events_file() -> Option<PathBuf> {
-    get_log_dir().map(|dir| dir.join("events.jsonl"))
+pub fn get_events_file(app: &tauri::AppHandle) -> Result<PathBuf, String> {
+    get_log_dir(app).map(|dir| dir.join("events.jsonl"))
 }
 
-pub fn get_settings_file() -> Option<PathBuf> {
-    get_config_dir().map(|dir| dir.join("settings.json"))
+pub fn get_settings_file(app: &tauri::AppHandle) -> Result<PathBuf, String> {
+    get_config_dir(app).map(|dir| dir.join("settings.json"))
 }
 
-pub fn load_settings() -> Settings {
-    let Some(settings_file) = get_settings_file() else {
-        eprintln!("[eocc] Cannot determine settings file path: home directory not found");
-        return Settings::default();
+pub fn load_settings(app: &tauri::AppHandle) -> Settings {
+    let settings_file = match get_settings_file(app) {
+        Ok(path) => path,
+        Err(e) => {
+            eprintln!("[eocc] Cannot determine settings file path: {}", e);
+            return Settings::default();
+        }
     };
 
     if settings_file.exists() {
@@ -37,10 +47,13 @@ pub fn load_settings() -> Settings {
     Settings::default()
 }
 
-pub fn save_settings(settings: &Settings) {
-    let Some(config_dir) = get_config_dir() else {
-        eprintln!("[eocc] Cannot save settings: home directory not found");
-        return;
+pub fn save_settings(app: &tauri::AppHandle, settings: &Settings) {
+    let config_dir = match get_config_dir(app) {
+        Ok(path) => path,
+        Err(e) => {
+            eprintln!("[eocc] Cannot save settings: {}", e);
+            return;
+        }
     };
 
     let settings_file = config_dir.join("settings.json");

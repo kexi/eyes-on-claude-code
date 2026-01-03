@@ -7,6 +7,7 @@ mod events;
 mod git;
 mod menu;
 mod settings;
+mod setup;
 mod state;
 mod tray;
 
@@ -23,9 +24,9 @@ use tauri::{
 use difit::DifitProcessRegistry;
 
 use commands::{
-    clear_all_sessions, get_always_on_top, get_dashboard_data, get_mini_view, get_repo_git_info,
-    get_settings, open_diff, remove_session, set_always_on_top, set_mini_view, set_opacity_active,
-    set_opacity_inactive,
+    check_claude_settings, clear_all_sessions, get_always_on_top, get_dashboard_data,
+    get_mini_view, get_repo_git_info, get_settings, get_setup_status, install_hook, open_diff,
+    remove_session, set_always_on_top, set_mini_view, set_opacity_active, set_opacity_inactive,
 };
 use constants::{
     ICON_NORMAL, MINI_VIEW_HEIGHT, MINI_VIEW_WIDTH, NORMAL_VIEW_HEIGHT, NORMAL_VIEW_WIDTH,
@@ -45,7 +46,7 @@ fn show_dashboard(app: &tauri::AppHandle) {
 
 fn toggle_always_on_top(app: &tauri::AppHandle, state: &mut AppState) {
     state.settings.always_on_top = !state.settings.always_on_top;
-    save_settings(&state.settings);
+    save_settings(app, &state.settings);
 
     if let Some(window) = app.get_webview_window("dashboard") {
         let _ = window.set_always_on_top(state.settings.always_on_top);
@@ -54,7 +55,7 @@ fn toggle_always_on_top(app: &tauri::AppHandle, state: &mut AppState) {
 
 fn toggle_mini_view(app: &tauri::AppHandle, state: &mut AppState) {
     state.settings.mini_view = !state.settings.mini_view;
-    save_settings(&state.settings);
+    save_settings(app, &state.settings);
 
     if let Some(window) = app.get_webview_window("dashboard") {
         let _ = window.set_decorations(!state.settings.mini_view);
@@ -103,11 +104,15 @@ fn create_dashboard_window(
 }
 
 fn start_file_watcher(app_handle: tauri::AppHandle, state: Arc<Mutex<AppState>>) {
-    std::thread::spawn(move || {
-        let Some(log_dir) = get_log_dir() else {
-            eprintln!("[eocc] Cannot start file watcher: home directory not found");
+    let log_dir = match get_log_dir(&app_handle) {
+        Ok(dir) => dir,
+        Err(e) => {
+            eprintln!("[eocc] Cannot start file watcher: {}", e);
             return;
-        };
+        }
+    };
+
+    std::thread::spawn(move || {
         if let Err(e) = fs::create_dir_all(&log_dir) {
             eprintln!("[eocc] Failed to create log directory: {:?}", e);
             return;
@@ -135,7 +140,7 @@ fn start_file_watcher(app_handle: tauri::AppHandle, state: Arc<Mutex<AppState>>)
                         eprintln!("[eocc] Failed to acquire state lock in watcher");
                         continue;
                     };
-                    let new_events = read_new_events(&mut state_guard);
+                    let new_events = read_new_events(&app_handle, &mut state_guard);
 
                     if !new_events.is_empty() {
                         update_tray_and_badge(&app_handle, &state_guard);
@@ -151,10 +156,13 @@ fn start_file_watcher(app_handle: tauri::AppHandle, state: Arc<Mutex<AppState>>)
     });
 }
 
-fn load_existing_events(state: &mut AppState) {
-    let Some(events_file) = get_events_file() else {
-        eprintln!("[eocc] Cannot load events: home directory not found");
-        return;
+fn load_existing_events(app: &tauri::AppHandle, state: &mut AppState) {
+    let events_file = match get_events_file(app) {
+        Ok(path) => path,
+        Err(e) => {
+            eprintln!("[eocc] Cannot load events: {}", e);
+            return;
+        }
     };
 
     if events_file.exists() {
@@ -177,16 +185,6 @@ fn main() {
     let state = Arc::new(Mutex::new(AppState::default()));
     let difit_registry = Arc::new(DifitProcessRegistry::new());
 
-    // Load settings and existing events
-    {
-        let Ok(mut state_guard) = state.lock() else {
-            eprintln!("[eocc] Failed to acquire state lock during initialization");
-            return;
-        };
-        state_guard.settings = load_settings();
-        load_existing_events(&mut state_guard);
-    }
-
     let state_clone = Arc::clone(&state);
     let state_for_managed = Arc::clone(&state);
     let difit_registry_clone = Arc::clone(&difit_registry);
@@ -207,11 +205,29 @@ fn main() {
             set_opacity_active,
             set_opacity_inactive,
             get_repo_git_info,
-            open_diff
+            open_diff,
+            // Setup commands
+            get_setup_status,
+            install_hook,
+            check_claude_settings
         ])
         .setup(move |app| {
             let app_handle = app.handle().clone();
             let state_for_tray = Arc::clone(&state_clone);
+
+            // Initialize setup (install hook script, create log directory)
+            if let Err(e) = setup::initialize_setup(&app_handle) {
+                eprintln!("[eocc] Setup initialization failed: {}", e);
+            }
+
+            // Load settings and existing events
+            {
+                let mut state_guard = state_for_tray
+                    .lock()
+                    .map_err(|_| tauri::Error::Anyhow(anyhow::anyhow!("Failed to acquire state lock")))?;
+                state_guard.settings = load_settings(&app_handle);
+                load_existing_events(&app_handle, &mut state_guard);
+            }
 
             // Get initial settings
             let (always_on_top, mini_view) = {
@@ -294,7 +310,7 @@ fn main() {
                         match state.lock() {
                             Ok(mut state_guard) => {
                                 state_guard.settings.sound_enabled = !state_guard.settings.sound_enabled;
-                                save_settings(&state_guard.settings);
+                                save_settings(app, &state_guard.settings);
                                 let _ = app.emit("settings-updated", &state_guard.settings);
                                 update_tray_and_badge(app, &state_guard);
                             }
@@ -310,7 +326,7 @@ fn main() {
                                     } else {
                                         state_guard.settings.opacity_inactive = opacity;
                                     }
-                                    save_settings(&state_guard.settings);
+                                    save_settings(app, &state_guard.settings);
                                     let _ = app.emit("settings-updated", &state_guard.settings);
                                     update_tray_and_badge(app, &state_guard);
                                 }
@@ -322,6 +338,8 @@ fn main() {
             });
 
             // Build tray menu
+            let state_for_tray_clone = Arc::clone(&state_for_tray);
+            let app_handle_for_tray = app_handle.clone();
             let tray_menu = {
                 let state_guard = state_for_tray
                     .lock()
@@ -342,14 +360,15 @@ fn main() {
                         show_dashboard(app);
                     }
                     "open_logs" => {
-                        if let Some(log_dir) = get_log_dir() {
-                            let _ = opener::open(&log_dir);
-                        } else {
-                            eprintln!("[eocc] Cannot open logs: home directory not found");
+                        match get_log_dir(&app_handle_for_tray) {
+                            Ok(log_dir) => {
+                                let _ = opener::open(&log_dir);
+                            }
+                            Err(e) => eprintln!("[eocc] Cannot open logs: {}", e),
                         }
                     }
                     "clear_sessions" => {
-                        match state_for_tray.lock() {
+                        match state_for_tray_clone.lock() {
                             Ok(mut state_guard) => {
                                 state_guard.sessions.clear();
                                 update_tray_and_badge(app, &state_guard);

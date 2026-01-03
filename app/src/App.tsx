@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { AppProvider, useAppContext } from '@/context/AppContext';
 import { useWindowOpacity } from '@/hooks/useWindowOpacity';
 import { useWindowDrag } from '@/hooks/useWindowDrag';
@@ -6,7 +6,9 @@ import { Header } from '@/components/Header';
 import { StatsGrid } from '@/components/StatsGrid';
 import { SessionList } from '@/components/SessionList';
 import { EventList } from '@/components/EventList';
-import { onWindowFocus, bringDiffWindowsToFront } from '@/lib/tauri';
+import { SetupModal } from '@/components/SetupModal';
+import { onWindowFocus, bringDiffWindowsToFront, getSetupStatus } from '@/lib/tauri';
+import type { SetupStatus } from '@/types';
 
 const Dashboard = () => {
   const { dashboardData, settings, isLoading, refreshData } = useAppContext();
@@ -73,9 +75,45 @@ const Dashboard = () => {
 };
 
 function App() {
+  const [setupStatus, setSetupStatus] = useState<SetupStatus | null>(null);
+  const [showSetupModal, setShowSetupModal] = useState(false);
+  const [setupChecked, setSetupChecked] = useState(false);
+
+  // Check setup status on mount
+  useEffect(() => {
+    getSetupStatus()
+      .then((status) => {
+        setSetupStatus(status);
+        if (!status.claude_settings_configured) {
+          setShowSetupModal(true);
+        }
+        setSetupChecked(true);
+      })
+      .catch((err) => {
+        console.error('Failed to get setup status:', err);
+        setSetupChecked(true);
+      });
+  }, []);
+
+  const handleSetupComplete = () => {
+    setShowSetupModal(false);
+  };
+
+  // Wait for setup check before showing anything
+  if (!setupChecked) {
+    return (
+      <div className="bg-bg-primary h-screen flex items-center justify-center">
+        <div className="text-text-secondary">Checking setup...</div>
+      </div>
+    );
+  }
+
   return (
     <AppProvider>
       <Dashboard />
+      {showSetupModal && setupStatus && (
+        <SetupModal setupStatus={setupStatus} onComplete={handleSetupComplete} />
+      )}
     </AppProvider>
   );
 }

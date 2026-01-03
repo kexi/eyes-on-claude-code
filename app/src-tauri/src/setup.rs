@@ -1,0 +1,313 @@
+use serde::{Deserialize, Serialize};
+use std::fs;
+use std::path::PathBuf;
+use tauri::Manager;
+
+use crate::settings::get_log_dir;
+
+/// Embedded hook script content
+const HOOK_SCRIPT: &str = include_str!("../../../eocc-hook");
+
+/// Generate hooks config with the correct hook script path
+fn generate_hooks_config(hook_script_path: &str) -> serde_json::Value {
+    serde_json::json!({
+        "Notification": [
+            {
+                "matcher": "permission_prompt",
+                "hooks": [{ "type": "command", "command": format!("{} notification permission_prompt", hook_script_path) }]
+            },
+            {
+                "matcher": "idle_prompt",
+                "hooks": [{ "type": "command", "command": format!("{} notification idle_prompt", hook_script_path) }]
+            }
+        ],
+        "Stop": [
+            { "hooks": [{ "type": "command", "command": format!("{} stop", hook_script_path) }] }
+        ],
+        "SessionStart": [
+            {
+                "matcher": "startup",
+                "hooks": [{ "type": "command", "command": format!("{} session_start startup", hook_script_path) }]
+            },
+            {
+                "matcher": "resume",
+                "hooks": [{ "type": "command", "command": format!("{} session_start resume", hook_script_path) }]
+            }
+        ],
+        "SessionEnd": [
+            { "hooks": [{ "type": "command", "command": format!("{} session_end", hook_script_path) }] }
+        ]
+    })
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SetupStatus {
+    pub hook_installed: bool,
+    pub hook_path: String,
+    pub claude_settings_configured: bool,
+    pub merged_settings: String,
+}
+
+/// Get the path to the hook script in the app data directory
+pub fn get_hook_script_path(app: &tauri::AppHandle) -> Result<PathBuf, String> {
+    let app_data_dir = app
+        .path()
+        .app_data_dir()
+        .map_err(|e| format!("Failed to get app data dir: {:?}", e))?;
+    Ok(app_data_dir.join("eocc-hook"))
+}
+
+/// Get the Claude settings file path
+pub fn get_claude_settings_path() -> Option<PathBuf> {
+    dirs::home_dir().map(|home| home.join(".claude").join("settings.json"))
+}
+
+/// Install the hook script to the app data directory
+pub fn install_hook_script(app: &tauri::AppHandle) -> Result<PathBuf, String> {
+    let app_data_dir = app
+        .path()
+        .app_data_dir()
+        .map_err(|e| format!("Failed to get app data dir: {:?}", e))?;
+
+    // Create directory if it doesn't exist
+    fs::create_dir_all(&app_data_dir)
+        .map_err(|e| format!("Failed to create app data directory: {:?}", e))?;
+
+    let hook_path = app_data_dir.join("eocc-hook");
+
+    // Write the hook script
+    fs::write(&hook_path, HOOK_SCRIPT)
+        .map_err(|e| format!("Failed to write hook script: {:?}", e))?;
+
+    // Make it executable (Unix only)
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let mut perms = fs::metadata(&hook_path)
+            .map_err(|e| format!("Failed to get hook permissions: {:?}", e))?
+            .permissions();
+        perms.set_mode(0o755);
+        fs::set_permissions(&hook_path, perms)
+            .map_err(|e| format!("Failed to set hook permissions: {:?}", e))?;
+    }
+
+    Ok(hook_path)
+}
+
+/// Check if the hook script is installed
+pub fn is_hook_installed(app: &tauri::AppHandle) -> bool {
+    get_hook_script_path(app)
+        .map(|p| p.exists())
+        .unwrap_or(false)
+}
+
+/// Check if Claude settings.json has the required hooks configuration
+pub fn check_claude_settings(hook_script_path: &str) -> bool {
+    let Some(settings_path) = get_claude_settings_path() else {
+        return false;
+    };
+
+    if !settings_path.exists() {
+        return false;
+    }
+
+    let content = match fs::read_to_string(&settings_path) {
+        Ok(c) => c,
+        Err(_) => return false,
+    };
+
+    let settings: serde_json::Value = match serde_json::from_str(&content) {
+        Ok(v) => v,
+        Err(_) => return false,
+    };
+
+    // Check if hooks section exists and contains our hook commands
+    let hooks = match settings.get("hooks") {
+        Some(h) => h,
+        None => return false,
+    };
+
+    // Check for at least one hook that contains our script path
+    let hooks_str = hooks.to_string();
+    hooks_str.contains(hook_script_path) || hooks_str.contains("eocc-hook")
+}
+
+/// Strip JSONC comments (// and /* */) from content
+fn strip_jsonc_comments(content: &str) -> String {
+    let mut result = String::new();
+    let mut chars = content.chars().peekable();
+    let mut in_string = false;
+    let mut escape_next = false;
+
+    while let Some(c) = chars.next() {
+        if escape_next {
+            result.push(c);
+            escape_next = false;
+            continue;
+        }
+
+        if c == '\\' && in_string {
+            result.push(c);
+            escape_next = true;
+            continue;
+        }
+
+        if c == '"' {
+            in_string = !in_string;
+            result.push(c);
+            continue;
+        }
+
+        if !in_string && c == '/' {
+            if let Some(&next) = chars.peek() {
+                if next == '/' {
+                    // Line comment - skip until newline
+                    chars.next();
+                    while let Some(&ch) = chars.peek() {
+                        if ch == '\n' {
+                            break;
+                        }
+                        chars.next();
+                    }
+                    continue;
+                } else if next == '*' {
+                    // Block comment - skip until */
+                    chars.next();
+                    while let Some(ch) = chars.next() {
+                        if ch == '*' {
+                            if let Some(&'/') = chars.peek() {
+                                chars.next();
+                                break;
+                            }
+                        }
+                    }
+                    continue;
+                }
+            }
+        }
+
+        result.push(c);
+    }
+
+    result
+}
+
+/// Merge hook arrays, replacing entries that match eocc-hook pattern
+fn merge_hook_array(
+    existing: Option<&serde_json::Value>,
+    new_hooks: &serde_json::Value,
+) -> serde_json::Value {
+    let mut result: Vec<serde_json::Value> = Vec::new();
+
+    // Keep existing hooks that don't contain eocc-hook
+    if let Some(serde_json::Value::Array(existing_arr)) = existing {
+        for hook in existing_arr {
+            let hook_str = hook.to_string();
+            // Skip old eocc hooks (will be replaced with new ones)
+            if !hook_str.contains("eocc-hook") && !hook_str.contains("claude-monitor-hook") {
+                result.push(hook.clone());
+            }
+        }
+    }
+
+    // Add new eocc hooks
+    if let serde_json::Value::Array(new_arr) = new_hooks {
+        for hook in new_arr {
+            result.push(hook.clone());
+        }
+    }
+
+    serde_json::Value::Array(result)
+}
+
+/// Generate merged settings JSON (existing settings + hooks)
+pub fn generate_merged_settings(hook_script_path: &str) -> Result<String, String> {
+    let new_hooks_config = generate_hooks_config(hook_script_path);
+
+    let settings_path = get_claude_settings_path();
+    let mut settings: serde_json::Value = if let Some(path) = &settings_path {
+        if path.exists() {
+            let content = fs::read_to_string(path)
+                .map_err(|e| format!("Failed to read settings: {:?}", e))?;
+            // Strip JSONC comments before parsing
+            let json_content = strip_jsonc_comments(&content);
+            serde_json::from_str(&json_content)
+                .map_err(|e| format!("Failed to parse settings: {:?}", e))?
+        } else {
+            serde_json::json!({})
+        }
+    } else {
+        serde_json::json!({})
+    };
+
+    // Deep merge hooks - preserve existing hook types we don't configure
+    let existing_hooks = settings.get("hooks").cloned();
+    let mut merged_hooks = existing_hooks
+        .as_ref()
+        .and_then(|h| h.as_object().cloned())
+        .unwrap_or_default();
+
+    // Merge each hook type from our config
+    if let Some(new_hooks_obj) = new_hooks_config.as_object() {
+        for (hook_type, new_hook_array) in new_hooks_obj {
+            let existing_array = existing_hooks
+                .as_ref()
+                .and_then(|h| h.get(hook_type));
+            merged_hooks.insert(
+                hook_type.clone(),
+                merge_hook_array(existing_array, new_hook_array),
+            );
+        }
+    }
+
+    // Update settings with merged hooks
+    if let Some(obj) = settings.as_object_mut() {
+        obj.insert("hooks".to_string(), serde_json::Value::Object(merged_hooks));
+    }
+
+    serde_json::to_string_pretty(&settings)
+        .map_err(|e| format!("Failed to serialize settings: {:?}", e))
+}
+
+/// Get the full setup status
+pub fn get_setup_status(app: &tauri::AppHandle) -> SetupStatus {
+    let hook_path = get_hook_script_path(app)
+        .map(|p| p.to_string_lossy().to_string())
+        .unwrap_or_default();
+
+    let hook_installed = is_hook_installed(app);
+    let claude_settings_configured = check_claude_settings(&hook_path);
+
+    let merged_settings = generate_merged_settings(&hook_path).unwrap_or_else(|e| {
+        format!("{{\"error\": \"{}\"}}", e)
+    });
+
+    SetupStatus {
+        hook_installed,
+        hook_path,
+        claude_settings_configured,
+        merged_settings,
+    }
+}
+
+/// Initialize setup: install hook script if needed, create log directory
+pub fn initialize_setup(app: &tauri::AppHandle) -> Result<(), String> {
+    // Install hook script if not present
+    if !is_hook_installed(app) {
+        install_hook_script(app)?;
+    }
+
+    // Create log directory
+    let log_dir = get_log_dir(app)?;
+    fs::create_dir_all(&log_dir)
+        .map_err(|e| format!("Failed to create log directory: {:?}", e))?;
+
+    // Create empty events file if it doesn't exist
+    let events_file = log_dir.join("events.jsonl");
+    if !events_file.exists() {
+        fs::write(&events_file, "")
+            .map_err(|e| format!("Failed to create events file: {:?}", e))?;
+    }
+
+    Ok(())
+}
