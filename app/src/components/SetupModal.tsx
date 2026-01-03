@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import type { SetupStatus } from '@/types';
 import { checkClaudeSettings } from '@/lib/tauri';
 
@@ -12,11 +12,23 @@ export const SetupModal = ({ setupStatus: initialStatus, onComplete }: SetupModa
   const [isChecking, setIsChecking] = useState(false);
   const [copied, setCopied] = useState(false);
 
+  const copyTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const completeTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Cleanup timeouts on unmount
+  useEffect(() => {
+    return () => {
+      if (copyTimeoutRef.current) clearTimeout(copyTimeoutRef.current);
+      if (completeTimeoutRef.current) clearTimeout(completeTimeoutRef.current);
+    };
+  }, []);
+
   const handleCopy = useCallback(async () => {
     try {
       await navigator.clipboard.writeText(status.merged_settings);
       setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
+      if (copyTimeoutRef.current) clearTimeout(copyTimeoutRef.current);
+      copyTimeoutRef.current = setTimeout(() => setCopied(false), 2000);
     } catch (err) {
       console.error('Failed to copy:', err);
     }
@@ -28,7 +40,8 @@ export const SetupModal = ({ setupStatus: initialStatus, onComplete }: SetupModa
       const newStatus = await checkClaudeSettings();
       setStatus(newStatus);
       if (newStatus.claude_settings_configured) {
-        setTimeout(onComplete, 1500);
+        if (completeTimeoutRef.current) clearTimeout(completeTimeoutRef.current);
+        completeTimeoutRef.current = setTimeout(onComplete, 1500);
       }
     } catch (err) {
       console.error('Failed to check settings:', err);

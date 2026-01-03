@@ -149,8 +149,38 @@ pub fn is_hook_installed(app: &tauri::AppHandle) -> bool {
         .unwrap_or(false)
 }
 
+/// Check if a hook command contains our hook script
+fn is_eocc_hook_command(command: &str) -> bool {
+    // Check if the command contains eocc-hook as a standalone word
+    // This avoids false positives like "my-eocc-hook-wrapper"
+    command.contains("eocc-hook ") || command.ends_with("eocc-hook")
+}
+
+/// Check if a hook array contains at least one eocc-hook command
+fn has_eocc_hook_in_array(hooks_array: &serde_json::Value) -> bool {
+    let Some(arr) = hooks_array.as_array() else {
+        return false;
+    };
+
+    for hook_entry in arr {
+        // Each entry can have a "hooks" array with commands
+        if let Some(hooks) = hook_entry.get("hooks") {
+            if let Some(hooks_arr) = hooks.as_array() {
+                for hook in hooks_arr {
+                    if let Some(command) = hook.get("command").and_then(|c| c.as_str()) {
+                        if is_eocc_hook_command(command) {
+                            return true;
+                        }
+                    }
+                }
+            }
+        }
+    }
+    false
+}
+
 /// Check if Claude settings.json has the required hooks configuration
-pub fn check_claude_settings(hook_script_path: &str) -> bool {
+pub fn check_claude_settings(_hook_script_path: &str) -> bool {
     let Some(settings_path) = get_claude_settings_path() else {
         return false;
     };
@@ -164,25 +194,28 @@ pub fn check_claude_settings(hook_script_path: &str) -> bool {
         Err(_) => return false,
     };
 
-    let settings: serde_json::Value = match serde_json::from_str(&content) {
+    // Strip JSONC comments before parsing
+    let json_content = strip_jsonc_comments(&content);
+
+    let settings: serde_json::Value = match serde_json::from_str(&json_content) {
         Ok(v) => v,
         Err(_) => return false,
     };
 
-    // Check if hooks section exists and contains our hook commands
-    let hooks = match settings.get("hooks") {
-        Some(h) => h,
-        None => return false,
+    // Check if hooks section exists
+    let Some(hooks) = settings.get("hooks") else {
+        return false;
     };
 
-    // Check for hook path in various forms:
-    // - Full path: /Users/.../eocc-hook
-    // - Tilde path: ~/.local/bin/eocc-hook
-    // - Just the script name: eocc-hook
-    let hooks_str = hooks.to_string();
-    hooks_str.contains(hook_script_path)
-        || hooks_str.contains("~/.local/bin/eocc-hook")
-        || hooks_str.contains("eocc-hook")
+    // Verify that at least SessionStart has eocc-hook configured
+    // This is the minimum requirement for the app to function
+    if let Some(session_start) = hooks.get("SessionStart") {
+        if has_eocc_hook_in_array(session_start) {
+            return true;
+        }
+    }
+
+    false
 }
 
 /// Strip JSONC comments (// and /* */) from content
