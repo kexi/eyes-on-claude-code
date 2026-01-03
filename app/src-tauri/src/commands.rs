@@ -2,7 +2,7 @@ use std::path::Path;
 use std::sync::Arc;
 use tauri::{Manager, WebviewUrl, WebviewWindowBuilder};
 
-use crate::constants::{MINI_VIEW_HEIGHT, MINI_VIEW_WIDTH, NORMAL_VIEW_HEIGHT, NORMAL_VIEW_WIDTH};
+use crate::constants::{MINI_VIEW_HEIGHT, MINI_VIEW_WIDTH, SETUP_MODAL_HEIGHT, SETUP_MODAL_WIDTH};
 use crate::difit::{start_difit_server, DiffType, DifitProcessRegistry};
 use crate::git::{get_git_info, GitInfo};
 use crate::settings::save_settings;
@@ -73,7 +73,7 @@ pub fn set_window_size_for_setup(enlarged: bool, app: tauri::AppHandle) -> Resul
     if let Some(window) = app.get_webview_window("dashboard") {
         if enlarged {
             let _ = window.set_decorations(true);
-            let _ = window.set_size(tauri::LogicalSize::new(NORMAL_VIEW_WIDTH, NORMAL_VIEW_HEIGHT));
+            let _ = window.set_size(tauri::LogicalSize::new(SETUP_MODAL_WIDTH, SETUP_MODAL_HEIGHT));
             let _ = window.center();
         } else {
             let _ = window.set_decorations(false);

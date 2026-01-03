@@ -8,6 +8,36 @@ use tauri::{
 
 use crate::state::{AppState, EventInfo, EventType, NotificationType, SessionInfo, SessionStatus, Settings};
 
+/// Get emoji for event type
+fn get_event_emoji(event: &EventInfo) -> &'static str {
+    match &event.event_type {
+        EventType::Notification => match &event.notification_type {
+            NotificationType::PermissionPrompt => "🔐",
+            NotificationType::IdlePrompt => "⏳",
+            NotificationType::Other => "🔔",
+        },
+        EventType::Stop => "✅",
+        EventType::SessionStart => "🚀",
+        EventType::SessionEnd => "🏁",
+        EventType::PostToolUse => "🔧",
+        EventType::UserPromptSubmit => "💬",
+        EventType::Unknown => "📌",
+    }
+}
+
+/// Get display name for event type
+fn get_event_name(event_type: &EventType) -> &'static str {
+    match event_type {
+        EventType::SessionStart => "session_start",
+        EventType::SessionEnd => "session_end",
+        EventType::Notification => "notification",
+        EventType::Stop => "stop",
+        EventType::PostToolUse => "post_tool_use",
+        EventType::UserPromptSubmit => "user_prompt_submit",
+        EventType::Unknown => "unknown",
+    }
+}
+
 /// Parse opacity menu ID and return (is_active, opacity_value) if valid
 /// Menu ID format: "opacity_{inactive|active}_{10|30|50|70|80|90|100}"
 pub fn parse_opacity_menu_id(menu_id: &str) -> Option<(bool, f64)> {
@@ -67,28 +97,8 @@ fn build_help_events_submenu<R: Runtime>(
         submenu_builder = submenu_builder.item(&empty_item);
     } else {
         for (idx, event) in events.iter().rev().take(10).enumerate() {
-            let emoji = match &event.event_type {
-                EventType::Notification => match &event.notification_type {
-                    NotificationType::PermissionPrompt => "🔐",
-                    NotificationType::IdlePrompt => "⏳",
-                    NotificationType::Other => "🔔",
-                },
-                EventType::Stop => "✅",
-                EventType::SessionStart => "🚀",
-                EventType::SessionEnd => "🏁",
-                EventType::PostToolUse => "🔧",
-                EventType::UserPromptSubmit => "💬",
-                EventType::Unknown => "📌",
-            };
-            let event_name = match &event.event_type {
-                EventType::SessionStart => "session_start",
-                EventType::SessionEnd => "session_end",
-                EventType::Notification => "notification",
-                EventType::Stop => "stop",
-                EventType::PostToolUse => "post_tool_use",
-                EventType::UserPromptSubmit => "user_prompt_submit",
-                EventType::Unknown => "unknown",
-            };
+            let emoji = get_event_emoji(event);
+            let event_name = get_event_name(&event.event_type);
             // Format timestamp for display (extract time portion)
             let time_str = event.timestamp.split('T').nth(1)
                 .map(|t| t.split('.').next().unwrap_or(t))
@@ -205,28 +215,8 @@ fn build_events_submenu<R: Runtime>(
     let mut submenu_builder = SubmenuBuilder::new(app, "Recent Events");
 
     for (idx, event) in events.iter().rev().take(10).enumerate() {
-        let emoji = match &event.event_type {
-            EventType::Notification => match &event.notification_type {
-                NotificationType::PermissionPrompt => "🔐",
-                NotificationType::IdlePrompt => "⏳",
-                NotificationType::Other => "🔔",
-            },
-            EventType::Stop => "✅",
-            EventType::SessionStart => "🚀",
-            EventType::SessionEnd => "🏁",
-            EventType::PostToolUse => "🔧",
-            EventType::UserPromptSubmit => "💬",
-            EventType::Unknown => "📌",
-        };
-        let event_name = match &event.event_type {
-            EventType::SessionStart => "session_start",
-            EventType::SessionEnd => "session_end",
-            EventType::Notification => "notification",
-            EventType::Stop => "stop",
-            EventType::PostToolUse => "post_tool_use",
-            EventType::UserPromptSubmit => "user_prompt_submit",
-            EventType::Unknown => "unknown",
-        };
+        let emoji = get_event_emoji(event);
+        let event_name = get_event_name(&event.event_type);
         let title = format!("{} {}: {}", emoji, event.project_name, event_name);
         let item = MenuItemBuilder::with_id(format!("event_{}", idx), &title)
             .enabled(false)
