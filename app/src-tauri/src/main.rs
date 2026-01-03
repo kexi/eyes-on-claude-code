@@ -6,6 +6,7 @@ mod difit;
 mod events;
 mod git;
 mod menu;
+mod persist;
 mod settings;
 mod setup;
 mod state;
@@ -22,6 +23,7 @@ use tauri::{
 };
 
 use difit::DifitProcessRegistry;
+use tauri_plugin_log::RotationStrategy;
 
 use commands::{
     check_claude_settings, clear_all_sessions, get_always_on_top, get_dashboard_data,
@@ -30,10 +32,11 @@ use commands::{
     set_window_size_for_setup,
 };
 use constants::{ICON_NORMAL, MINI_VIEW_HEIGHT, MINI_VIEW_WIDTH};
-use events::{process_event, read_new_events};
+use events::drain_events_queue;
 use menu::{build_app_menu, build_tray_menu, parse_opacity_menu_id};
-use settings::{get_events_file, get_log_dir, load_settings, save_settings};
-use state::{AppState, EventInfo, ManagedState};
+use persist::{load_runtime_state, save_runtime_state};
+use settings::{get_app_log_dir, get_log_dir, load_settings, save_settings};
+use state::{AppState, ManagedState};
 use tray::{emit_state_update, update_tray_and_badge};
 
 fn show_dashboard(app: &tauri::AppHandle) {
@@ -112,11 +115,12 @@ fn start_file_watcher(app_handle: tauri::AppHandle, state: Arc<Mutex<AppState>>)
                         eprintln!("[eocc] Failed to acquire state lock in watcher");
                         continue;
                     };
-                    let new_events = read_new_events(&app_handle, &mut state_guard);
+                    let new_events = drain_events_queue(&app_handle, &mut state_guard);
 
                     if !new_events.is_empty() {
                         update_tray_and_badge(&app_handle, &state_guard);
                         emit_state_update(&app_handle, &state_guard);
+                        save_runtime_state(&app_handle, &state_guard);
                     }
                 }
                 Err(e) => {
@@ -128,31 +132,6 @@ fn start_file_watcher(app_handle: tauri::AppHandle, state: Arc<Mutex<AppState>>)
     });
 }
 
-fn load_existing_events(app: &tauri::AppHandle, state: &mut AppState) {
-    let events_file = match get_events_file(app) {
-        Ok(path) => path,
-        Err(e) => {
-            eprintln!("[eocc] Cannot load events: {}", e);
-            return;
-        }
-    };
-
-    if events_file.exists() {
-        if let Ok(content) = fs::read_to_string(&events_file) {
-            for line in content.lines() {
-                if !line.is_empty() {
-                    if let Ok(event) = serde_json::from_str::<EventInfo>(line) {
-                        process_event(state, event);
-                    }
-                }
-            }
-            if let Ok(metadata) = fs::metadata(&events_file) {
-                state.last_file_pos = metadata.len();
-            }
-        }
-    }
-}
-
 fn main() {
     let state = Arc::new(Mutex::new(AppState::default()));
     let difit_registry = Arc::new(DifitProcessRegistry::new());
@@ -162,6 +141,12 @@ fn main() {
     let difit_registry_clone = Arc::clone(&difit_registry);
 
     tauri::Builder::default()
+        .plugin(
+            tauri_plugin_log::Builder::new()
+                .max_file_size(10 * 1024 * 1024)
+                .rotation_strategy(RotationStrategy::KeepOne)
+                .build(),
+        )
         .plugin(tauri_plugin_shell::init())
         .manage(ManagedState(state_for_managed))
         .manage(difit_registry_clone)
@@ -199,7 +184,16 @@ fn main() {
                     .lock()
                     .map_err(|_| tauri::Error::Anyhow(anyhow::anyhow!("Failed to acquire state lock")))?;
                 state_guard.settings = load_settings(&app_handle);
-                load_existing_events(&app_handle, &mut state_guard);
+                // Restore previous in-memory state snapshot (sessions/recent events)
+                if let Some(restored) = load_runtime_state(&app_handle) {
+                    state_guard.sessions = restored.sessions;
+                    state_guard.recent_events = restored.recent_events;
+                }
+                // Drain any queued events written by the hook while app was not running
+                let new_events = drain_events_queue(&app_handle, &mut state_guard);
+                if !new_events.is_empty() {
+                    save_runtime_state(&app_handle, &state_guard);
+                }
             }
 
             // Get initial settings
@@ -260,7 +254,7 @@ fn main() {
                         show_dashboard(app);
                     }
                     "open_logs" => {
-                        match get_log_dir(&app_handle_for_menu) {
+                        match get_app_log_dir(&app_handle_for_menu) {
                             Ok(log_dir) => {
                                 let _ = opener::open(&log_dir);
                             }
@@ -330,7 +324,7 @@ fn main() {
                         show_dashboard(app);
                     }
                     "open_logs" => {
-                        match get_log_dir(&app_handle_for_tray) {
+                        match get_app_log_dir(&app_handle_for_tray) {
                             Ok(log_dir) => {
                                 let _ = opener::open(&log_dir);
                             }
@@ -343,6 +337,7 @@ fn main() {
                                 state_guard.sessions.clear();
                                 update_tray_and_badge(app, &state_guard);
                                 emit_state_update(app, &state_guard);
+                                save_runtime_state(app, &state_guard);
                             }
                             Err(e) => eprintln!("[eocc] Failed to acquire lock for clear_sessions: {:?}", e),
                         }

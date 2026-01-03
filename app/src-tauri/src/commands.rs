@@ -5,6 +5,7 @@ use tauri::{Manager, WebviewUrl, WebviewWindowBuilder};
 use crate::constants::{MINI_VIEW_HEIGHT, MINI_VIEW_WIDTH, SETUP_MODAL_HEIGHT, SETUP_MODAL_WIDTH};
 use crate::difit::{start_difit_server, DiffType, DifitProcessRegistry};
 use crate::git::{get_git_info, GitInfo};
+use crate::persist::save_runtime_state;
 use crate::settings::save_settings;
 use crate::setup::{self, SetupStatus};
 use crate::state::{DashboardData, ManagedState, Settings};
@@ -28,6 +29,7 @@ pub fn remove_session(
     state_guard.sessions.remove(&project_dir);
     update_tray_and_badge(&app, &state_guard);
     emit_state_update(&app, &state_guard);
+    save_runtime_state(&app, &state_guard);
     Ok(())
 }
 
@@ -40,6 +42,7 @@ pub fn clear_all_sessions(
     state_guard.sessions.clear();
     update_tray_and_badge(&app, &state_guard);
     emit_state_update(&app, &state_guard);
+    save_runtime_state(&app, &state_guard);
     Ok(())
 }
 

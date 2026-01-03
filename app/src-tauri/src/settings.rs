@@ -18,6 +18,14 @@ pub fn get_log_dir(_app: &tauri::AppHandle) -> Result<PathBuf, String> {
     Ok(home.join(".eocc").join("logs"))
 }
 
+/// Get the application log directory (Tauri's log directory)
+/// This is where tauri-plugin-log writes log files
+pub fn get_app_log_dir(app: &tauri::AppHandle) -> Result<PathBuf, String> {
+    app.path()
+        .app_log_dir()
+        .map_err(|e| format!("Failed to get app log dir: {:?}", e))
+}
+
 pub fn get_events_file(app: &tauri::AppHandle) -> Result<PathBuf, String> {
     get_log_dir(app).map(|dir| dir.join("events.jsonl"))
 }

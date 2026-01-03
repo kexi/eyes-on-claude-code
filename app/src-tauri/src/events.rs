@@ -1,5 +1,6 @@
 use std::fs::File;
-use std::io::{BufRead, BufReader, Seek, SeekFrom};
+use std::io::{BufRead, BufReader};
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::settings::get_events_file;
 use crate::state::{AppState, EventInfo, EventType, NotificationType, SessionInfo, SessionStatus};
@@ -65,43 +66,111 @@ pub fn process_event(state: &mut AppState, event: EventInfo) {
     }
 }
 
-pub fn read_new_events(app: &tauri::AppHandle, state: &mut AppState) -> Vec<EventInfo> {
+/// Drain (consume) `events.jsonl` as a queue:
+/// - atomically rename `events.jsonl` to a processing file
+/// - recreate an empty `events.jsonl`
+/// - process each line (JSON) and append the raw JSON to the app log
+/// - delete the processing file
+///
+/// Parse-failed lines are logged as error and dropped.
+pub fn drain_events_queue(app: &tauri::AppHandle, state: &mut AppState) -> Vec<EventInfo> {
     let mut new_events = Vec::new();
 
     let events_file = match get_events_file(app) {
         Ok(path) => path,
-        Err(_) => return new_events,
+        Err(e) => {
+            log::error!(target: "eocc.events", "Cannot determine events file path: {}", e);
+            return new_events;
+        }
     };
 
     if !events_file.exists() {
         return new_events;
     }
 
-    if let Ok(mut file) = File::open(&events_file) {
-        if let Ok(metadata) = file.metadata() {
-            let file_size = metadata.len();
+    let file_size = match std::fs::metadata(&events_file).map(|m| m.len()) {
+        Ok(size) => size,
+        Err(_) => return new_events,
+    };
+    if file_size == 0 {
+        return new_events;
+    }
 
-            if file_size < state.last_file_pos {
-                state.last_file_pos = 0;
-            }
+    let ts = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_millis())
+        .unwrap_or(0);
+    let pid = std::process::id();
+    let processing_path = events_file.with_file_name(format!("events.processing.{}.{}.jsonl", ts, pid));
 
-            if file_size > state.last_file_pos {
-                let _ = file.seek(SeekFrom::Start(state.last_file_pos));
-                let reader = BufReader::new(&file);
+    // Atomically move the queue file out of the way so the hook can keep appending to a fresh file.
+    if let Err(e) = std::fs::rename(&events_file, &processing_path) {
+        // If the hook is writing concurrently, retry later (best-effort).
+        log::warn!(
+            target: "eocc.events",
+            "Failed to rename events.jsonl for draining (will retry later): {:?}",
+            e
+        );
+        return new_events;
+    }
 
-                for line in reader.lines().map_while(Result::ok) {
-                    if !line.is_empty() {
-                        if let Ok(event) = serde_json::from_str::<EventInfo>(&line) {
-                            process_event(state, event.clone());
-                            new_events.push(event);
-                        }
+    // Recreate empty events.jsonl (best-effort).
+    if let Err(e) = std::fs::write(&events_file, "") {
+        log::error!(
+            target: "eocc.events",
+            "Failed to recreate empty events.jsonl: {:?}",
+            e
+        );
+    }
+
+    // Process the rotated file.
+    match File::open(&processing_path) {
+        Ok(file) => {
+            let reader = BufReader::new(file);
+            for line in reader.lines().map_while(Result::ok) {
+                if line.is_empty() {
+                    continue;
+                }
+                match serde_json::from_str::<EventInfo>(&line) {
+                    Ok(event) => {
+                        process_event(state, event.clone());
+                        new_events.push(event);
+                        // Store raw event JSON in the app log (rotated by tauri-plugin-log).
+                        log::info!(target: "eocc.events.raw", "{}", line);
+                    }
+                    Err(err) => {
+                        log::error!(
+                            target: "eocc.events.parse",
+                            "Failed to parse event jsonl line (dropped): err={} line={}",
+                            err,
+                            line
+                        );
                     }
                 }
-
-                state.last_file_pos = file_size;
             }
         }
+        Err(e) => {
+            log::error!(
+                target: "eocc.events",
+                "Failed to open processing events file {:?}: {:?}",
+                processing_path,
+                e
+            );
+        }
     }
+
+    // Delete consumed file.
+    if let Err(e) = std::fs::remove_file(&processing_path) {
+        log::error!(
+            target: "eocc.events",
+            "Failed to delete processing events file {:?}: {:?}",
+            processing_path,
+            e
+        );
+    }
+
+    // Keep the legacy offset reset consistent (no longer used by draining mode).
+    state.last_file_pos = 0;
 
     new_events
 }
