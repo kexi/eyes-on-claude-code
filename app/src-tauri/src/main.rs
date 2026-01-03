@@ -25,8 +25,9 @@ use difit::DifitProcessRegistry;
 
 use commands::{
     check_claude_settings, clear_all_sessions, get_always_on_top, get_dashboard_data,
-    get_mini_view, get_repo_git_info, get_settings, get_setup_status, install_hook, open_diff,
-    remove_session, set_always_on_top, set_mini_view, set_opacity_active, set_opacity_inactive,
+    get_mini_view, get_repo_git_info, get_settings, get_setup_status, install_hook,
+    open_claude_settings, open_diff, remove_session, set_always_on_top, set_mini_view,
+    set_opacity_active, set_opacity_inactive,
 };
 use constants::{
     ICON_NORMAL, MINI_VIEW_HEIGHT, MINI_VIEW_WIDTH, NORMAL_VIEW_HEIGHT, NORMAL_VIEW_WIDTH,
@@ -209,7 +210,8 @@ fn main() {
             // Setup commands
             get_setup_status,
             install_hook,
-            check_claude_settings
+            check_claude_settings,
+            open_claude_settings
         ])
         .setup(move |app| {
             let app_handle = app.handle().clone();

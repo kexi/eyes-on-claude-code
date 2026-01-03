@@ -1,10 +1,40 @@
 use serde::{Deserialize, Serialize};
 use std::fs;
-use std::path::PathBuf;
+use std::io::Write;
+use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 use tauri::Manager;
 
 use crate::settings::get_log_dir;
+
+/// Write content to a file atomically using temp file + rename pattern
+fn atomic_write(path: &Path, content: &[u8]) -> Result<(), String> {
+    let temp_path = path.with_extension("tmp");
+
+    // Write to temp file
+    let mut file = fs::File::create(&temp_path)
+        .map_err(|e| format!("Failed to create temp file: {:?}", e))?;
+    file.write_all(content)
+        .map_err(|e| format!("Failed to write to temp file: {:?}", e))?;
+    file.sync_all()
+        .map_err(|e| format!("Failed to sync temp file: {:?}", e))?;
+    drop(file);
+
+    // Rename temp file to target (atomic on most filesystems)
+    fs::rename(&temp_path, path).map_err(|e| format!("Failed to rename temp file: {:?}", e))?;
+
+    Ok(())
+}
+
+/// Hook type constants (matching Claude Code's hook event names)
+mod hook_types {
+    pub const SESSION_START: &str = "SessionStart";
+    pub const SESSION_END: &str = "SessionEnd";
+    pub const NOTIFICATION: &str = "Notification";
+    pub const STOP: &str = "Stop";
+    pub const POST_TOOL_USE: &str = "PostToolUse";
+    pub const USER_PROMPT_SUBMIT: &str = "UserPromptSubmit";
+}
 
 /// Global storage for initialization error (set during app startup)
 static INIT_ERROR: Mutex<Option<String>> = Mutex::new(None);
@@ -37,8 +67,9 @@ const HOOK_SCRIPT: &str = include_str!("../../../eocc-hook");
 
 /// Generate hooks config with the correct hook script path
 fn generate_hooks_config(hook_script_path: &str) -> serde_json::Value {
+    use hook_types::*;
     serde_json::json!({
-        "Notification": [
+        (NOTIFICATION): [
             {
                 "matcher": "permission_prompt",
                 "hooks": [{ "type": "command", "command": format!("{} notification permission_prompt", hook_script_path) }]
@@ -48,16 +79,16 @@ fn generate_hooks_config(hook_script_path: &str) -> serde_json::Value {
                 "hooks": [{ "type": "command", "command": format!("{} notification idle_prompt", hook_script_path) }]
             }
         ],
-        "Stop": [
+        (STOP): [
             { "hooks": [{ "type": "command", "command": format!("{} stop", hook_script_path) }] }
         ],
-        "PostToolUse": [
+        (POST_TOOL_USE): [
             { "hooks": [{ "type": "command", "command": format!("{} post_tool_use", hook_script_path) }] }
         ],
-        "UserPromptSubmit": [
+        (USER_PROMPT_SUBMIT): [
             { "hooks": [{ "type": "command", "command": format!("{} user_prompt_submit", hook_script_path) }] }
         ],
-        "SessionStart": [
+        (SESSION_START): [
             {
                 "matcher": "startup",
                 "hooks": [{ "type": "command", "command": format!("{} session_start startup", hook_script_path) }]
@@ -67,7 +98,7 @@ fn generate_hooks_config(hook_script_path: &str) -> serde_json::Value {
                 "hooks": [{ "type": "command", "command": format!("{} session_start resume", hook_script_path) }]
             }
         ],
-        "SessionEnd": [
+        (SESSION_END): [
             { "hooks": [{ "type": "command", "command": format!("{} session_end", hook_script_path) }] }
         ]
     })
@@ -140,9 +171,8 @@ pub fn install_hook_script(app: &tauri::AppHandle) -> Result<PathBuf, String> {
 
     let hook_path = app_data_dir.join("eocc-hook");
 
-    // Write the hook script
-    fs::write(&hook_path, HOOK_SCRIPT)
-        .map_err(|e| format!("Failed to write hook script: {:?}", e))?;
+    // Write the hook script atomically
+    atomic_write(&hook_path, HOOK_SCRIPT.as_bytes())?;
 
     // Make it executable (Unix only)
     #[cfg(unix)]
@@ -256,39 +286,41 @@ pub fn check_claude_settings() -> HookStatus {
         return default_status;
     };
 
+    use hook_types::*;
+
     // Check each hook type
     let session_start = hooks
-        .get("SessionStart")
+        .get(SESSION_START)
         .map(|h| has_eocc_hook_in_array(h, None))
         .unwrap_or(false);
 
     let session_end = hooks
-        .get("SessionEnd")
+        .get(SESSION_END)
         .map(|h| has_eocc_hook_in_array(h, None))
         .unwrap_or(false);
 
     let stop = hooks
-        .get("Stop")
+        .get(STOP)
         .map(|h| has_eocc_hook_in_array(h, None))
         .unwrap_or(false);
 
     let post_tool_use = hooks
-        .get("PostToolUse")
+        .get(POST_TOOL_USE)
         .map(|h| has_eocc_hook_in_array(h, None))
         .unwrap_or(false);
 
     let user_prompt_submit = hooks
-        .get("UserPromptSubmit")
+        .get(USER_PROMPT_SUBMIT)
         .map(|h| has_eocc_hook_in_array(h, None))
         .unwrap_or(false);
 
     let notification_permission = hooks
-        .get("Notification")
+        .get(NOTIFICATION)
         .map(|h| has_eocc_hook_in_array(h, Some("permission_prompt")))
         .unwrap_or(false);
 
     let notification_idle = hooks
-        .get("Notification")
+        .get(NOTIFICATION)
         .map(|h| has_eocc_hook_in_array(h, Some("idle_prompt")))
         .unwrap_or(false);
 

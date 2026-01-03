@@ -344,3 +344,40 @@ pub fn check_claude_settings(app: tauri::AppHandle) -> Result<SetupStatus, Strin
     }
     Ok(setup::get_setup_status(&app))
 }
+
+/// Open the Claude settings.json file in the default editor
+#[tauri::command]
+pub fn open_claude_settings() -> Result<(), String> {
+    let home = dirs::home_dir().ok_or("Failed to get home directory")?;
+    let settings_path = home.join(".claude").join("settings.json");
+
+    if !settings_path.exists() {
+        return Err("settings.json does not exist".to_string());
+    }
+
+    #[cfg(target_os = "macos")]
+    {
+        std::process::Command::new("open")
+            .arg(&settings_path)
+            .spawn()
+            .map_err(|e| format!("Failed to open settings: {:?}", e))?;
+    }
+
+    #[cfg(target_os = "linux")]
+    {
+        std::process::Command::new("xdg-open")
+            .arg(&settings_path)
+            .spawn()
+            .map_err(|e| format!("Failed to open settings: {:?}", e))?;
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        std::process::Command::new("cmd")
+            .args(["/C", "start", "", &settings_path.to_string_lossy()])
+            .spawn()
+            .map_err(|e| format!("Failed to open settings: {:?}", e))?;
+    }
+
+    Ok(())
+}

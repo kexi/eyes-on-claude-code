@@ -1,12 +1,16 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import type { SetupStatus, HookStatus } from '@/types';
-import { checkClaudeSettings } from '@/lib/tauri';
+import { checkClaudeSettings, openClaudeSettings } from '@/lib/tauri';
 import { allHooksConfigured } from '@/lib/utils';
 
 interface SetupModalProps {
   setupStatus: SetupStatus;
   onComplete: () => void;
 }
+
+// Constants
+const COPY_FEEDBACK_DURATION_MS = 2000;
+const COMPLETE_DELAY_MS = 1500;
 
 // Hook display names
 const HOOK_LABELS: Record<keyof HookStatus, string> = {
@@ -23,44 +27,66 @@ export const SetupModal = ({ setupStatus: initialStatus, onComplete }: SetupModa
   const [status, setStatus] = useState<SetupStatus>(initialStatus);
   const [isChecking, setIsChecking] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const copyTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const completeTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const errorTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Cleanup timeouts on unmount
   useEffect(() => {
     return () => {
       if (copyTimeoutRef.current) clearTimeout(copyTimeoutRef.current);
       if (completeTimeoutRef.current) clearTimeout(completeTimeoutRef.current);
+      if (errorTimeoutRef.current) clearTimeout(errorTimeoutRef.current);
     };
+  }, []);
+
+  const showError = useCallback((message: string) => {
+    setError(message);
+    if (errorTimeoutRef.current) clearTimeout(errorTimeoutRef.current);
+    errorTimeoutRef.current = setTimeout(() => setError(null), 5000);
   }, []);
 
   const handleCopy = useCallback(async () => {
     try {
       await navigator.clipboard.writeText(status.merged_settings);
       setCopied(true);
+      setError(null);
       if (copyTimeoutRef.current) clearTimeout(copyTimeoutRef.current);
-      copyTimeoutRef.current = setTimeout(() => setCopied(false), 2000);
+      copyTimeoutRef.current = setTimeout(() => setCopied(false), COPY_FEEDBACK_DURATION_MS);
     } catch (err) {
       console.error('Failed to copy:', err);
+      showError('Failed to copy to clipboard');
     }
-  }, [status.merged_settings]);
+  }, [status.merged_settings, showError]);
 
   const handleCheckAgain = useCallback(async () => {
     setIsChecking(true);
+    setError(null);
     try {
       const newStatus = await checkClaudeSettings();
       setStatus(newStatus);
       if (allHooksConfigured(newStatus.hooks) && !newStatus.init_error) {
         if (completeTimeoutRef.current) clearTimeout(completeTimeoutRef.current);
-        completeTimeoutRef.current = setTimeout(onComplete, 1500);
+        completeTimeoutRef.current = setTimeout(onComplete, COMPLETE_DELAY_MS);
       }
     } catch (err) {
       console.error('Failed to check settings:', err);
+      showError('Failed to check settings');
     } finally {
       setIsChecking(false);
     }
-  }, [onComplete]);
+  }, [onComplete, showError]);
+
+  const handleOpenSettings = useCallback(async () => {
+    try {
+      await openClaudeSettings();
+    } catch (err) {
+      console.error('Failed to open settings:', err);
+      showError('Failed to open settings.json');
+    }
+  }, [showError]);
 
   const isAllConfigured = allHooksConfigured(status.hooks) && !status.init_error;
 
@@ -94,6 +120,18 @@ export const SetupModal = ({ setupStatus: initialStatus, onComplete }: SetupModa
             <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-4">
               <p className="text-red-400 text-sm font-medium mb-1">Initialization Error</p>
               <p className="text-text-primary text-sm break-words">{status.init_error}</p>
+            </div>
+          )}
+
+          {error && (
+            <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-3 flex items-center justify-between">
+              <p className="text-red-400 text-sm">{error}</p>
+              <button
+                onClick={() => setError(null)}
+                className="text-red-400 hover:text-red-300 text-sm"
+              >
+                ✕
+              </button>
             </div>
           )}
 
@@ -160,6 +198,12 @@ export const SetupModal = ({ setupStatus: initialStatus, onComplete }: SetupModa
           )}
 
           <div className="flex justify-end gap-3 pt-4 border-t border-bg-card">
+            <button
+              onClick={handleOpenSettings}
+              className="px-4 py-2 bg-bg-card hover:bg-bg-card/80 text-text-primary rounded-lg text-sm font-medium transition-colors"
+            >
+              Open settings.json
+            </button>
             <button
               onClick={handleCheckAgain}
               disabled={isChecking}
