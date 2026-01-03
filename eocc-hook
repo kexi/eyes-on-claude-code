@@ -88,7 +88,6 @@ async function main() {
     message,
     notification_type: notificationType,
     tool_name: toolName,
-    raw_input: rawInput,
   };
 
   const payloadJson = JSON.stringify(payload);
