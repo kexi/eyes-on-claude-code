@@ -56,5 +56,3 @@ pub fn save_runtime_state(app: &tauri::AppHandle, state: &AppState) {
         log::error!(target: "eocc.persist", "Failed to write runtime state: {:?}", e);
     }
 }
-
-

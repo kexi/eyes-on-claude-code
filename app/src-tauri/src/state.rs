@@ -130,7 +130,6 @@ impl Default for Settings {
 pub struct AppState {
     pub sessions: HashMap<String, SessionInfo>,
     pub recent_events: VecDeque<EventInfo>,
-    pub last_file_pos: u64,
     pub settings: Settings,
 }
 
@@ -193,7 +192,6 @@ impl Default for AppState {
         Self {
             sessions: HashMap::new(),
             recent_events: VecDeque::new(),
-            last_file_pos: 0,
             settings: Settings::default(),
         }
     }

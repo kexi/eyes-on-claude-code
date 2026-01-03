@@ -38,7 +38,7 @@ pub fn load_settings(app: &tauri::AppHandle) -> Settings {
     let settings_file = match get_settings_file(app) {
         Ok(path) => path,
         Err(e) => {
-            eprintln!("[eocc] Cannot determine settings file path: {}", e);
+            log::error!(target: "eocc.settings", "Cannot determine settings file path: {}", e);
             return Settings::default();
         }
     };
@@ -47,9 +47,9 @@ pub fn load_settings(app: &tauri::AppHandle) -> Settings {
         match fs::read_to_string(&settings_file) {
             Ok(content) => match serde_json::from_str(&content) {
                 Ok(settings) => return settings,
-                Err(e) => eprintln!("[eocc] Failed to parse settings file: {:?}", e),
+                Err(e) => log::error!(target: "eocc.settings", "Failed to parse settings file: {:?}", e),
             },
-            Err(e) => eprintln!("[eocc] Failed to read settings file: {:?}", e),
+            Err(e) => log::error!(target: "eocc.settings", "Failed to read settings file: {:?}", e),
         }
     }
     Settings::default()
@@ -59,7 +59,7 @@ pub fn save_settings(app: &tauri::AppHandle, settings: &Settings) {
     let config_dir = match get_config_dir(app) {
         Ok(path) => path,
         Err(e) => {
-            eprintln!("[eocc] Cannot save settings: {}", e);
+            log::error!(target: "eocc.settings", "Cannot save settings: {}", e);
             return;
         }
     };
@@ -69,17 +69,17 @@ pub fn save_settings(app: &tauri::AppHandle, settings: &Settings) {
     let content = match serde_json::to_string_pretty(settings) {
         Ok(c) => c,
         Err(e) => {
-            eprintln!("[eocc] Failed to serialize settings: {:?}", e);
+            log::error!(target: "eocc.settings", "Failed to serialize settings: {:?}", e);
             return;
         }
     };
 
     if let Err(e) = fs::create_dir_all(&config_dir) {
-        eprintln!("[eocc] Failed to create config directory: {:?}", e);
+        log::error!(target: "eocc.settings", "Failed to create config directory: {:?}", e);
         return;
     }
 
     if let Err(e) = fs::write(&settings_file, content) {
-        eprintln!("[eocc] Failed to write settings file: {:?}", e);
+        log::error!(target: "eocc.settings", "Failed to write settings file: {:?}", e);
     }
 }

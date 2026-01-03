@@ -169,8 +169,5 @@ pub fn drain_events_queue(app: &tauri::AppHandle, state: &mut AppState) -> Vec<E
         );
     }
 
-    // Keep the legacy offset reset consistent (no longer used by draining mode).
-    state.last_file_pos = 0;
-
     new_events
 }
