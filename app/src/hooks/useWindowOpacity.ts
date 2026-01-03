@@ -1,23 +1,34 @@
 import { useEffect } from 'react';
-import { onWindowFocus, onWindowBlur, isFocused } from '@/lib/tauri';
+import { listen, type UnlistenFn } from '@tauri-apps/api/event';
+import { getCurrentWindow } from '@tauri-apps/api/window';
 
 export const useWindowOpacity = (activeOpacity: number, inactiveOpacity: number) => {
   useEffect(() => {
-    const applyOpacity = (focused: boolean) => {
-      const opacity = focused ? activeOpacity : inactiveOpacity;
+    const applyOpacity = (active: boolean) => {
+      const opacity = active ? activeOpacity : inactiveOpacity;
       document.body.style.setProperty('opacity', String(opacity), 'important');
     };
 
-    const unlisteners: Array<() => void> = [];
+    let unlisten: UnlistenFn | undefined;
 
-    onWindowFocus(() => applyOpacity(true)).then((u) => unlisteners.push(u));
-    onWindowBlur(() => applyOpacity(false)).then((u) => unlisteners.push(u));
+    // Listen for custom dashboard-active event from Rust backend
+    // This event is emitted when:
+    // - Dashboard gains/loses focus
+    // - A difit window gains focus (dashboard becomes inactive)
+    listen<boolean>('dashboard-active', (event) => {
+      applyOpacity(event.payload);
+    }).then((u) => {
+      unlisten = u;
+    });
 
-    // Initial state
-    isFocused().then((focused) => applyOpacity(focused));
+    // Set initial opacity based on current focus state
+    getCurrentWindow()
+      .isFocused()
+      .then((focused) => applyOpacity(focused))
+      .catch(console.error);
 
     return () => {
-      unlisteners.forEach((u) => u());
+      unlisten?.();
     };
   }, [activeOpacity, inactiveOpacity]);
 };

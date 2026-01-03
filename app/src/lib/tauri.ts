@@ -23,23 +23,6 @@ export const openClaudeSettings = () => invoke('open_claude_settings');
 export const setWindowSizeForSetup = (enlarged: boolean) =>
   invoke('set_window_size_for_setup', { enlarged });
 
-// Window operations
-export const getAppWindow = () => {
-  try {
-    return getCurrentWindow();
-  } catch {
-    return null;
-  }
-};
-
-export const isFocused = async (): Promise<boolean> => {
-  const window = getAppWindow();
-  if (window) {
-    return window.isFocused();
-  }
-  return document.hasFocus();
-};
-
 // Event listeners
 export const onStateUpdated = (callback: (data: DashboardData) => void): Promise<UnlistenFn> => {
   return listen<DashboardData>('state-updated', (event) => callback(event.payload));
@@ -51,10 +34,6 @@ export const onSettingsUpdated = (callback: (settings: Settings) => void): Promi
 
 export const onWindowFocus = (callback: () => void): Promise<UnlistenFn> => {
   return listen('tauri://focus', callback);
-};
-
-export const onWindowBlur = (callback: () => void): Promise<UnlistenFn> => {
-  return listen('tauri://blur', callback);
 };
 
 // Bring all diff windows to front

@@ -366,9 +366,20 @@ fn main() {
 
             Ok(())
         })
-        .on_window_event(move |_window, _event| {
-            // Note: This is called for each window event
-            // We handle difit window cleanup in commands.rs on_window_event
+        .on_window_event(move |window, event| {
+            // Track window focus to update dashboard opacity
+            if let tauri::WindowEvent::Focused(focused) = event {
+                let label = window.label();
+                let app = window.app_handle();
+
+                if label == "dashboard" {
+                    // Dashboard focus changed - emit event directly
+                    let _ = app.emit_to("dashboard", "dashboard-active", *focused);
+                } else if label.starts_with("difit-") && *focused {
+                    // A difit window gained focus - dashboard should be inactive
+                    let _ = app.emit_to("dashboard", "dashboard-active", false);
+                }
+            }
         })
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
