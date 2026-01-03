@@ -218,6 +218,7 @@ fn main() {
             // Initialize setup (install hook script, create log directory)
             if let Err(e) = setup::initialize_setup(&app_handle) {
                 eprintln!("[eocc] Setup initialization failed: {}", e);
+                setup::set_init_error(e);
             }
 
             // Load settings and existing events

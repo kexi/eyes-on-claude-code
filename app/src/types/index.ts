@@ -65,4 +65,5 @@ export interface SetupStatus {
   hook_path: string;
   claude_settings_configured: boolean;
   merged_settings: string;
+  init_error: string | null;
 }

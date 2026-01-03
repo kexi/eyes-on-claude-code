@@ -37,7 +37,7 @@ export const SetupModal = ({ setupStatus: initialStatus, onComplete }: SetupModa
     }
   }, [onComplete]);
 
-  if (status.claude_settings_configured) {
+  if (status.claude_settings_configured && !status.init_error) {
     return (
       <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
         <div className="bg-bg-primary rounded-xl p-6 max-w-md w-full mx-4 shadow-2xl">
@@ -63,6 +63,13 @@ export const SetupModal = ({ setupStatus: initialStatus, onComplete }: SetupModa
         <h2 className="text-xl font-semibold text-text-primary mb-4">Setup Required</h2>
 
         <div className="space-y-4">
+          {status.init_error && (
+            <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-4">
+              <p className="text-red-400 text-sm font-medium mb-1">Initialization Error</p>
+              <p className="text-text-primary text-sm break-words">{status.init_error}</p>
+            </div>
+          )}
+
           <div className="bg-warning/10 border border-warning/30 rounded-lg p-4">
             <p className="text-text-primary text-sm">
               Claude Code hooks are not configured. The following settings are your existing{' '}

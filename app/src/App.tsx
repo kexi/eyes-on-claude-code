@@ -84,7 +84,7 @@ function App() {
     getSetupStatus()
       .then((status) => {
         setSetupStatus(status);
-        if (!status.claude_settings_configured) {
+        if (!status.claude_settings_configured || status.init_error) {
           setShowSetupModal(true);
         }
         setSetupChecked(true);

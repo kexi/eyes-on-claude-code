@@ -1,9 +1,36 @@
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::PathBuf;
+use std::sync::Mutex;
 use tauri::Manager;
 
 use crate::settings::get_log_dir;
+
+/// Global storage for initialization error (set during app startup)
+static INIT_ERROR: Mutex<Option<String>> = Mutex::new(None);
+
+/// Set the initialization error (called from main.rs on setup failure)
+pub fn set_init_error(error: String) {
+    match INIT_ERROR.lock() {
+        Ok(mut guard) => {
+            *guard = Some(error);
+        }
+        Err(e) => {
+            eprintln!("[eocc] Failed to set init error (lock poisoned): {:?}", e);
+        }
+    }
+}
+
+/// Get the initialization error if any
+pub fn get_init_error() -> Option<String> {
+    match INIT_ERROR.lock() {
+        Ok(guard) => guard.clone(),
+        Err(e) => {
+            eprintln!("[eocc] Failed to get init error (lock poisoned): {:?}", e);
+            None
+        }
+    }
+}
 
 /// Embedded hook script content
 const HOOK_SCRIPT: &str = include_str!("../../../eocc-hook");
@@ -46,6 +73,7 @@ pub struct SetupStatus {
     pub hook_path: String,
     pub claude_settings_configured: bool,
     pub merged_settings: String,
+    pub init_error: Option<String>,
 }
 
 /// Get the symlink path for the hook script (avoids spaces in path)
@@ -306,11 +334,14 @@ pub fn get_setup_status(app: &tauri::AppHandle) -> SetupStatus {
         format!("{{\"error\": \"{}\"}}", e)
     });
 
+    let init_error = get_init_error();
+
     SetupStatus {
         hook_installed,
         hook_path: tilde_path,
         claude_settings_configured,
         merged_settings,
+        init_error,
     }
 }
 
