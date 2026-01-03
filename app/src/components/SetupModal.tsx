@@ -158,6 +158,10 @@ export const SetupModal = ({ setupStatus: initialStatus, onComplete }: SetupModa
               <code className="bg-bg-card px-1.5 py-0.5 rounded text-xs">~/.claude/settings.json</code>{' '}
               file:
             </p>
+            <p className="text-text-secondary text-xs mt-2">
+              Note: The settings below are merged with your existing settings.json. Your other
+              hooks and settings are preserved; only eocc hooks are added/updated.
+            </p>
           </div>
 
           <div className="relative">

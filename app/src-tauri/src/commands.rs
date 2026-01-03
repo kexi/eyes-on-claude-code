@@ -335,10 +335,15 @@ pub fn check_claude_settings(app: tauri::AppHandle) -> Result<SetupStatus, Strin
 #[tauri::command]
 pub fn open_claude_settings() -> Result<(), String> {
     let home = dirs::home_dir().ok_or("Failed to get home directory")?;
-    let settings_path = home.join(".claude").join("settings.json");
+    let claude_dir = home.join(".claude");
+    let settings_path = claude_dir.join("settings.json");
 
+    // Create directory and file if they don't exist
     if !settings_path.exists() {
-        return Err("settings.json does not exist".to_string());
+        std::fs::create_dir_all(&claude_dir)
+            .map_err(|e| format!("Failed to create .claude directory: {:?}", e))?;
+        std::fs::write(&settings_path, "{}\n")
+            .map_err(|e| format!("Failed to create settings.json: {:?}", e))?;
     }
 
     #[cfg(target_os = "macos")]

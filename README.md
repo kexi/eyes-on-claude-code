@@ -1,264 +1,231 @@
 # Eyes on Claude Code
 
-グローバルHooksを使用して、全てのClaude Codeセッションからのイベントを監視するメニューバー常駐（Tauri）アプリです。
+Claude Code の **グローバルHooks** からイベントを収集し、複数プロジェクトのセッション状態を **メニューバー（トレイ）** と **ダッシュボード** で一覧できる Tauri アプリです。
 
-## ファイル構成
+[screenshot_ダッシュボードの全体（Sessions一覧と右上ステータス）]
+
+---
+
+## 1. setup
+
+### 前提
+
+- Claude Code
+- Node.js v23+
+
+### 初回起動
+
+初回起動時にはアプリケーション上にhooksの設定のインストラクションが表示されます。
+
+
+
+アプリは起動時に次を自動で行います。
+
+- Hookスクリプトの配置（アプリのデータ領域に書き込み）
+- `~/.local/bin/eocc-hook` を作成（シンボリックリンク。パスにスペースが入るのを避けるため）
+- ログディレクトリ作成: `~/.eocc/logs/`
+- 空のイベントファイル作成: `~/.eocc/logs/events.jsonl`
+
+初回は **Setupモーダル** が表示されます。
+
+[screenshot_Setup Requiredモーダル（Copy / Open settings.json / Check Again）]
+
+Setupモーダルの指示に従って、生成された設定を `~/.claude/settings.json` に反映してください。
+
+- Setupモーダルは既存設定を読み込み、**hooksだけを差し替える** JSON を生成します（古い eocc hooks は置換され、他のhooks/設定は保持されます）。
+- 反映後に **Check Again** を押してOKになれば完了です。
+
+### Claude Code側の再起動
+
+Hooksは起動時に読み込まれるため、設定変更後は **Claude Codeセッションを再起動**してください。
+
+```bash
+claude
+```
+
+### 生成されるファイル/保存先
+
+**Hook/ログ**
 
 ```
 ~/.local/bin/
-  └── eocc-hook            # Hookスクリプト（アプリが自動配置するシンボリックリンク）
+  └── eocc-hook              # Hookスクリプト（アプリが作るシンボリックリンク）
 
 ~/.claude/
   └── settings.json          # グローバルHooks設定
 
 ~/.eocc/
   └── logs/
-      ├── events.jsonl       # イベントログ（JSONL形式）
-      ├── console.log        # 人間可読ログ
-      └── latest.json        # 最新イベント（デバッグ用）
-      └── stdin-debug.log    # Hookのstdin入力デバッグ（必要時のみ）
+      ├── events.jsonl       # イベントログ（JSONL）
+      ├── console.log        # 人間向けログ（1行1イベント）
+      ├── latest.json        # 最新イベント（デバッグ用）
+      └── stdin-debug.log    # Hook stdin 入力ログ（デバッグ用）
 ```
 
-## セットアップ手順
+**アプリ設定**
 
-### 事前要件
+- アプリ設定ファイルは Tauri の `app_data_dir/settings.json` に保存されます（例: Always on Top / opacity / sound）。
 
-- `jq`（必須。Hookが `events.jsonl` を生成するために使用します）
-  - macOS: `brew install jq`
+---
 
-### 1. Hookをインストール（推奨：アプリ経由）
+## 2. 使い方
 
-アプリ起動時に Hook を自動インストールし、`~/.local/bin/eocc-hook` を作成（シンボリックリンク）します。
+### ダッシュボード
 
-1. `app/` から開発起動 or ビルド済みアプリを起動
-2. 初回は Setup モーダルが表示されるので、生成された設定を `~/.claude/settings.json` に反映
+- ダッシュボードには Sessions 一覧が表示されます。
+- 右上のステータスは `Monitoring` または `N waiting` を表示します。
 
-### 2. グローバルHooks設定を適用（手動で行う場合）
+[screenshot_Sessions一覧（Waitingのセッションがハイライトされている状態）]
 
-```bash
-# スクリプトをコピー（このリポジトリ直下にある場合）
-mkdir -p ~/.local/bin
-cp ./eocc-hook ~/.local/bin/eocc-hook
+#### セッションカード
 
-# 実行権限を付与
-chmod +x ~/.local/bin/eocc-hook
+- カードをクリックすると展開し、Git状態と Diff 操作が表示されます。
+- `waiting_for` がある場合は、カード内に補足（message/tool_name）が表示されます。
 
-# PATHに追加（必要に応じて）
-echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.zshrc
-source ~/.zshrc
-```
+[screenshot_セッションカード展開（unstaged/staged/commit/branchのDiffボタン）]
 
-`~/.claude/settings.json` に `hooks` セクションを追加/更新してください。
-（既存設定がある場合は、他の設定を壊さないようにマージしてください。アプリの Setup 画面は「既存設定 + hooks」をマージしたJSONを生成できます。）
+#### Refresh
 
-```bash
-# 既存の設定を確認
-cat ~/.claude/settings.json
+- `Refresh` で手動更新できます。
+- バックアップとして **5秒ごとに自動更新**も行います。
 
-# エディタで編集
-code ~/.claude/settings.json  # または vim, nano など
-```
+### トレイ（メニューバー）メニュー
 
-### 3. Claude Code を再起動
+- waiting数、セッション一覧、Recent Events、Dashboard表示、ログフォルダを開く、セッションクリア等ができます。
 
-Hooks設定は起動時に読み込まれるため、既存のClaude Codeセッションを再起動してください。
+[screenshot_トレイメニュー（waiting header / sessions / open dashboard / open log folder）]
 
-```bash
-# 新しいセッションを開始
-claude
-```
+### Diff（difit連携）
 
-### 4. 動作確認
+セッションカードの展開時に、次のDiffを開けます。
 
-別のターミナルでログを監視：
+- `unstaged`: 作業ツリーの差分
+- `staged`: indexの差分
+- `commit`: 最新コミットの差分（`HEAD~1..HEAD`）
+- `branch`: デフォルトブランチ（自動検出）との比較
 
-```bash
-# 人間可読ログ
-tail -f ~/.eocc/logs/console.log
-```
+注意:
 
-## 使い方
+- Diff表示は内部で `npx difit` を対象リポジトリ内で起動します。
+  - Node.js（`npx`）が必要です。
+  - 初回は `npx` が `difit` を取得する場合があり、環境によってはネットワークが必要です。
+- 対象がGitリポジトリでない場合、または差分が無い場合は開けません。
 
-### ログファイル直接参照
+### ウィンドウ操作/設定
 
-```bash
-# 人間可読ログ
-cat ~/.eocc/logs/console.log
+- Always on Top の切替に対応します。
+- フォーカス状態に応じてOpacityを変えられます。
+  - difitウィンドウがフォーカスされるとダッシュボードは「非アクティブ」として扱われます。
+- Sound をONにすると、状態変化に応じて効果音が鳴ります。
+  - Waiting（Permission/Input）: 注意音
+  - Completed: 完了音
 
-# JSONログ（jqで整形）
-cat ~/.eocc/logs/events.jsonl | jq '.'
+---
 
-# 最新イベント
-cat ~/.eocc/logs/latest.json | jq '.'
-```
+## 3. サポート機能一覧
 
-### ログのクリア
+- 複数セッション監視: `~/.eocc/logs/events.jsonl` を監視して状態を集約
+- 状態表示: Active / WaitingPermission / WaitingInput / Completed
+- waiting数の可視化: トレイのツールチップ、ダッシュボードの表示、（対応環境では）バッジ
+- Recent Events: 最新イベントをメニューから確認（最大50件保持、メニュー表示は直近10件）
+- ログフォルダを開く: メニューから `~/.eocc/logs` を開く
+- セッションクリア/削除:
+  - トレイ: Clear Sessions
+  - ダッシュボード: Remove session
+- Git情報の表示: ブランチ名、unstaged/staged有無、最新コミット
+- Diff表示: difit（`npx difit`）で差分を別ウィンドウに表示
+- 通知音: waiting / completed を音で通知（SoundのON/OFFあり）
 
-```bash
-# 全ログをクリア
-rm -f ~/.eocc/logs/*.jsonl ~/.eocc/logs/*.log ~/.eocc/logs/*.json
-```
+### 監視イベント（Hook）
 
-## イベントタイプ
+Hookスクリプトはイベントを `events.jsonl` に追記します。
 
-| イベント | 絵文字 | 説明 |
-|----------|--------|------|
-| `notification` (permission_prompt) | 🔐 | 許可待ち |
-| `notification` (idle_prompt) | ⏳ | 入力待ち（60秒以上アイドル） |
-| `stop` | ✅ | 応答完了 |
-| `post_tool_use` | 🔧 | ツール実行後（状態更新用） |
-| `user_prompt_submit` | 💬 | ユーザーがプロンプト送信 |
-| `session_start` | 🚀 | セッション開始 |
-| `session_end` | 🏁 | セッション終了 |
+| event | 用途 | セッション状態への反映 |
+|---|---|---|
+| `session_start` (startup/resume) | セッション開始 | Activeとして登録 |
+| `session_end` | セッション終了 | セッション削除 |
+| `notification` (permission_prompt) | 承認待ち | WaitingPermission |
+| `notification` (idle_prompt) | 入力待ち | WaitingInput |
+| `stop` | 応答完了 | Completed |
+| `post_tool_use` | ツール実行後 | Active |
+| `user_prompt_submit` | プロンプト送信 | Active |
 
-## ログ出力例
+---
 
-### console.log
-```
-[14:32:15] 🚀 my-project: session_start (startup)
-[14:32:45] 🔐 my-project: notification (permission_prompt) - Claude needs your permission to use Bash
-[14:32:58] 🔧 my-project: post_tool_use
-[14:33:00] 💬 my-project: user_prompt_submit
-[14:33:02] ✅ my-project: stop
-[14:35:10] 🏁 my-project: session_end
-```
-
-### events.jsonl
-```json
-{
-  "timestamp": "2025-01-02T05:32:15Z",
-  "event": "session_start",
-  "matcher": "startup",
-  "project_name": "my-project",
-  "project_dir": "/Users/you/projects/my-project",
-  "session_id": "abc123",
-  "message": "",
-  "notification_type": "",
-  "tool_name": "",
-  "raw_input": { ... }
-}
-```
-
-## トラブルシューティング
-
-### Hooksが動作しない場合
-
-1. Claude Codeで `/hooks` コマンドを実行して設定を確認
-2. スクリプトの実行権限を確認: `ls -la ~/.local/bin/eocc-hook`
-3. `jq` がインストールされているか確認: `command -v jq`
-
-### ログが記録されない場合
-
-1. ログディレクトリの存在確認: `ls -la ~/.eocc/logs/`
-2. 手動でスクリプトをテスト:
-   ```bash
-   echo '{"session_id":"test","message":"test message"}' | \
-     CLAUDE_PROJECT_DIR=/tmp/test ~/.local/bin/eocc-hook notification permission_prompt
-   cat ~/.eocc/logs/latest.json
-   ```
-
-## デスクトップアプリ (Tauri)
-
-`app/` にメニューバー常駐アプリがあります。
-
-### 機能
-
-- メニューバーにアイコン表示
-- セッション状態のリアルタイム監視
-- waiting数をバッジ/ツールチップ/メニュー表示で通知
-- Recent Events サブメニュー
-- ログフォルダを開く機能
+## 4. dev向けのinstruction
 
 ### 必要環境
 
-- Rust (rustup)
-- Node.js
-- pnpm（`tauri.conf.json` が `pnpm dev/build` を使用します）
+- Rust（`rustup`）
+- Node.js（`npx`含む）
+- pnpm
 
-### 開発環境セットアップ
+### セットアップ
 
 ```bash
-# Rustのインストール（未インストールの場合）
-curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
-source "$HOME/.cargo/env"
-
-# プロジェクトディレクトリに移動
 cd app
-
-# 依存関係インストール
 pnpm install
 ```
 
-### 開発モードで起動
+### 開発起動
 
 ```bash
-# Cargo を PATH に追加（シェル起動時に自動で追加されない場合）
-source "$HOME/.cargo/env"
-
 cd app
-pnpm dev
+pnpm tauri dev
 ```
 
-### リリースビルド
+補足:
+
+- Vite dev server は `localhost:1420` を使用します（`app/vite.config.ts`）。
+
+### ビルド
 
 ```bash
-source "$HOME/.cargo/env"
 cd app
-pnpm build
-
-# 成果物
-# - src-tauri/target/release/bundle/macos/Eyes on Claude Code.app
-# - src-tauri/target/release/bundle/dmg/Eyes on Claude Code_1.0.0_aarch64.dmg
+pnpm tauri build
 ```
 
-### 動作確認手順
+成果物（macOS例）:
 
-1. **アプリを起動**
-   ```bash
-   open src-tauri/target/release/bundle/macos/Eyes\ on\ Claude\ Code.app
-   ```
+- `app/src-tauri/target/release/bundle/macos/Eyes on Claude Code.app`
+- `app/src-tauri/target/release/bundle/dmg/Eyes on Claude Code_1.0.0_aarch64.dmg`
 
-2. **テストイベントを送信**
-   ```bash
-   # セッション開始
-   echo '{"session_id": "test-001"}' | \
-     CLAUDE_PROJECT_DIR="/path/to/project" \
-     ~/.local/bin/eocc-hook session_start startup
+---
 
-   # permission待ち（アイコンがオレンジに変化）
-   echo '{"session_id": "test-001", "notification_type": "permission_prompt"}' | \
-     CLAUDE_PROJECT_DIR="/path/to/project" \
-     ~/.local/bin/eocc-hook notification permission_prompt
+## 5. troubleshooting
 
-   # 完了（アイコンがグレーに戻る）
-   echo '{"session_id": "test-001"}' | \
-     CLAUDE_PROJECT_DIR="/path/to/project" \
-     ~/.local/bin/eocc-hook stop
+### Setupモーダルが消えない（hooksがNGのまま）
 
-   # セッション終了
-   echo '{"session_id": "test-001"}' | \
-     CLAUDE_PROJECT_DIR="/path/to/project" \
-     ~/.local/bin/eocc-hook session_end
-   ```
+- `~/.claude/settings.json` を開き、Setupモーダルで生成した内容に反映できているか確認
+- Claude Codeで `/hooks` を実行して、hooksが読み込まれているか確認
+- `~/.local/bin/eocc-hook` の存在/実行権限を確認
+  - `ls -la ~/.local/bin/eocc-hook`
+- Node.js が利用できるか確認
+  - `command -v node`
 
-3. **メニューバーで確認**
-   - アイコンをクリックしてメニューを表示
-   - セッション一覧、Recent Events を確認
+### ログが増えない / セッションが表示されない
 
-### ログファイルのリセット
+- `~/.eocc/logs/console.log` を確認
+  - `tail -f ~/.eocc/logs/console.log`
+- `~/.eocc/logs/stdin-debug.log` でHookが呼ばれているか確認
+- `events.jsonl` が作成/更新されているか確認
+  - `ls -la ~/.eocc/logs/`
 
-```bash
-rm ~/.eocc/logs/events.jsonl
-touch ~/.eocc/logs/events.jsonl
-```
+### セッションが unknown になる
 
-### インストール
+- 手動テスト等で `CLAUDE_PROJECT_DIR` が未設定だと `project_dir=unknown` になります。
+- Claude Code実行経由のhooksで `project_dir` が入っているか `events.jsonl` を確認してください。
 
-```bash
-# または手動で ~/Applications にコピー
-cp -r app/src-tauri/target/release/bundle/macos/Eyes\ on\ Claude\ Code.app ~/Applications/
-```
+### Diffが開けない
 
-### ログイン時に自動起動
+- 対象がGitリポジトリか確認（`.git` が無いとエラーになります）
+- 差分が無いと「No diff content to display」になり開けません
+- Node.js（`npx`）が利用できるか確認
+  - `command -v node && command -v npx`
+- 環境によっては `npx` が `difit` を取得するためネットワークが必要です
 
-システム設定 > 一般 > ログイン項目 に `Eyes on Claude Code.app` を追加
+### 音が鳴らない
+
+- メニューの Sound がONになっているか確認
+- ブラウザ/OS側の制限でAudioがブロックされる場合があります（設定変更後に再度状態変化を発生させて確認してください）
+

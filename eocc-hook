@@ -1,114 +1,145 @@
-#!/bin/bash
-# eocc-hook - Eyes on Claude Code event monitoring script
-#
-# Usage: eocc-hook <event_type> [matcher]
-#
-# This script is called from ~/.claude/settings.json and
-# logs events from all Claude Code sessions.
+#!/usr/bin/env node
+/**
+ * eocc-hook - Eyes on Claude Code event monitoring script (Node.js)
+ *
+ * Usage: eocc-hook <event_type> [matcher]
+ *
+ * This script is called from ~/.claude/settings.json and logs events from all Claude Code sessions.
+ */
 
-set -euo pipefail
+const fs = require("node:fs");
+const path = require("node:path");
+const os = require("node:os");
 
-# Log directory
-LOG_DIR="${HOME}/.eocc/logs"
-LOG_FILE="${LOG_DIR}/events.jsonl"
-LATEST_FILE="${LOG_DIR}/latest.json"
+function isoTimestampUtc() {
+  return new Date().toISOString();
+}
 
-# Create directory if it doesn't exist
-mkdir -p "$LOG_DIR"
+function localTimeHHMMSS(d = new Date()) {
+  const pad = (n) => String(n).padStart(2, "0");
+  return `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+}
 
-# Arguments
-EVENT_TYPE="${1:-unknown}"
-MATCHER="${2:-}"
+function basename(p) {
+  const clean = String(p || "").replace(/\/+$/, "");
+  return clean ? path.basename(clean) : "";
+}
 
-# Read JSON from stdin
-# Note: Claude Code passes hook data via stdin as JSON
-INPUT=""
-if [ -t 0 ]; then
-    # stdin is a terminal, no input
-    INPUT='{}'
-else
-    # Read all stdin
-    INPUT=$(cat 2>/dev/null || echo '{}')
-fi
+function safeJsonParse(text) {
+  try {
+    const v = JSON.parse(text);
+    if (v && typeof v === "object" && !Array.isArray(v)) return v;
+    return {};
+  } catch {
+    return {};
+  }
+}
 
-# Fallback if input is empty
-if [ -z "$INPUT" ] || [ "$INPUT" = "" ]; then
-    INPUT='{}'
-fi
+function getString(obj, key, fallback = "") {
+  const v = obj ? obj[key] : undefined;
+  if (v === undefined || v === null) return fallback;
+  if (typeof v === "string") return v;
+  if (typeof v === "number" || typeof v === "boolean") return String(v);
+  return fallback;
+}
 
-# Debug: save raw stdin input to log
-echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] EVENT=$EVENT_TYPE MATCHER=$MATCHER INPUT=$INPUT" >> "${LOG_DIR}/stdin-debug.log"
+function getEmoji(eventType, notificationType) {
+  if (eventType === "notification") {
+    if (notificationType === "permission_prompt") return "🔐";
+    if (notificationType === "idle_prompt") return "⏳";
+    return "🔔";
+  }
+  if (eventType === "stop") return "✅";
+  if (eventType === "session_start") return "🚀";
+  if (eventType === "session_end") return "🏁";
+  if (eventType === "pre_tool_use") return "🔧";
+  if (eventType === "post_tool_use") return "🔧";
+  if (eventType === "user_prompt_submit") return "💬";
+  return "📌";
+}
 
-# Extract session ID and message
-SESSION_ID=$(echo "$INPUT" | jq -r '.session_id // "unknown"' 2>/dev/null || echo "unknown")
-MESSAGE=$(echo "$INPUT" | jq -r '.message // empty' 2>/dev/null || echo "")
-NOTIFICATION_TYPE=$(echo "$INPUT" | jq -r '.notification_type // empty' 2>/dev/null || echo "")
-TOOL_NAME=$(echo "$INPUT" | jq -r '.tool_name // empty' 2>/dev/null || echo "")
+async function readStdin() {
+  if (process.stdin.isTTY) return "{}";
+  const chunks = [];
+  for await (const chunk of process.stdin) chunks.push(Buffer.from(chunk));
+  const text = Buffer.concat(chunks).toString("utf8");
+  return text.trim() ? text : "{}";
+}
 
-# For notification events, use matcher as notification type if not in input
-if [ "$EVENT_TYPE" = "notification" ] && [ -z "$NOTIFICATION_TYPE" ]; then
-    NOTIFICATION_TYPE="$MATCHER"
-fi
+function appendLine(filePath, line) {
+  fs.appendFileSync(filePath, line + "\n", { encoding: "utf8" });
+}
 
-# Extract project name (last directory name from CLAUDE_PROJECT_DIR)
-PROJECT_DIR="${CLAUDE_PROJECT_DIR:-unknown}"
-PROJECT_NAME=$(basename "$PROJECT_DIR" 2>/dev/null || echo "unknown")
+function writeFile(filePath, content) {
+  fs.writeFileSync(filePath, content, { encoding: "utf8" });
+}
 
-# Timestamp
-TIMESTAMP=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-TIMESTAMP_LOCAL=$(date +%H:%M:%S)
+async function main() {
+  const eventType = process.argv[2] || "unknown";
+  const matcher = process.argv[3] || "";
 
-# Create payload
-PAYLOAD=$(jq -nc \
-  --arg event "$EVENT_TYPE" \
-  --arg matcher "$MATCHER" \
-  --arg project_dir "$PROJECT_DIR" \
-  --arg project_name "$PROJECT_NAME" \
-  --arg session_id "$SESSION_ID" \
-  --arg message "$MESSAGE" \
-  --arg notification_type "$NOTIFICATION_TYPE" \
-  --arg tool_name "$TOOL_NAME" \
-  --arg timestamp "$TIMESTAMP" \
-  --argjson input "$INPUT" \
-  '{
-    timestamp: $timestamp,
-    event: $event,
-    matcher: $matcher,
-    project_name: $project_name,
-    project_dir: $project_dir,
-    session_id: $session_id,
-    message: $message,
-    notification_type: $notification_type,
-    tool_name: $tool_name,
-    raw_input: $input
-  }' 2>/dev/null || echo '{"error": "failed to create payload"}')
+  const home = os.homedir();
+  const logDir = path.join(home, ".eocc", "logs");
+  const logFile = path.join(logDir, "events.jsonl");
+  const latestFile = path.join(logDir, "latest.json");
+  const consoleLog = path.join(logDir, "console.log");
+  const stdinDebugLog = path.join(logDir, "stdin-debug.log");
 
-# Append to JSONL file
-echo "$PAYLOAD" >> "$LOG_FILE"
+  fs.mkdirSync(logDir, { recursive: true });
 
-# Save latest event to separate file (for debugging)
-echo "$PAYLOAD" > "$LATEST_FILE"
+  const inputText = await readStdin();
+  const rawInput = safeJsonParse(inputText);
 
-# Console output (for debugging)
-# Emoji based on event type
-case "$EVENT_TYPE" in
-    notification)
-        case "$NOTIFICATION_TYPE" in
-            permission_prompt) EMOJI="🔐" ;;
-            idle_prompt) EMOJI="⏳" ;;
-            *) EMOJI="🔔" ;;
-        esac
-        ;;
-    stop) EMOJI="✅" ;;
-    session_start) EMOJI="🚀" ;;
-    session_end) EMOJI="🏁" ;;
-    pre_tool_use) EMOJI="🔧" ;;
-    post_tool_use) EMOJI="🔧" ;;
-    user_prompt_submit) EMOJI="💬" ;;
-    *) EMOJI="📌" ;;
-esac
+  const projectDir = process.env.CLAUDE_PROJECT_DIR || "unknown";
+  const projectName = basename(projectDir) || "unknown";
 
-# Log message output (to stderr to avoid polluting Claude's transcript)
-echo "[$TIMESTAMP_LOCAL] $EMOJI $PROJECT_NAME: $EVENT_TYPE${MATCHER:+ ($MATCHER)}${MESSAGE:+ - $MESSAGE}" >> "${LOG_DIR}/console.log"
+  const sessionId = getString(rawInput, "session_id", "unknown");
+  const message = getString(rawInput, "message", "");
+  let notificationType = getString(rawInput, "notification_type", "");
+  const toolName = getString(rawInput, "tool_name", "");
 
-exit 0
+  // For notification events, use matcher as notification type if not in input
+  if (eventType === "notification" && !notificationType) {
+    notificationType = matcher;
+  }
+
+  const timestamp = isoTimestampUtc();
+  const timestampLocal = localTimeHHMMSS();
+
+  // Debug: save raw stdin input
+  appendLine(
+    stdinDebugLog,
+    `[${timestamp}] EVENT=${eventType} MATCHER=${matcher} INPUT=${inputText}`
+  );
+
+  const payload = {
+    timestamp,
+    event: eventType,
+    matcher,
+    project_name: projectName,
+    project_dir: projectDir,
+    session_id: sessionId,
+    message,
+    notification_type: notificationType,
+    tool_name: toolName,
+    raw_input: rawInput,
+  };
+
+  const payloadJson = JSON.stringify(payload);
+
+  appendLine(logFile, payloadJson);
+  writeFile(latestFile, payloadJson);
+
+  const emoji = getEmoji(eventType, notificationType);
+  const matcherSuffix = matcher ? ` (${matcher})` : "";
+  const messageSuffix = message ? ` - ${message}` : "";
+  appendLine(
+    consoleLog,
+    `[${timestampLocal}] ${emoji} ${projectName}: ${eventType}${matcherSuffix}${messageSuffix}`
+  );
+}
+
+main().catch(() => {
+  // Never fail the hook call (best-effort logging).
+  process.exit(0);
+});
