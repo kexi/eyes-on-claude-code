@@ -165,6 +165,7 @@ fn build_events_submenu<R: Runtime>(
             EventType::SessionStart => "🚀",
             EventType::SessionEnd => "🏁",
             EventType::PostToolUse => "🔧",
+            EventType::UserPromptSubmit => "💬",
             EventType::Unknown => "📌",
         };
         let event_name = match &event.event_type {
@@ -173,6 +174,7 @@ fn build_events_submenu<R: Runtime>(
             EventType::Notification => "notification",
             EventType::Stop => "stop",
             EventType::PostToolUse => "post_tool_use",
+            EventType::UserPromptSubmit => "user_prompt_submit",
             EventType::Unknown => "unknown",
         };
         let title = format!("{} {}: {}", emoji, event.project_name, event_name);

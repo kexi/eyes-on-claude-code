@@ -17,6 +17,7 @@ const allHooksConfigured = (hooks: HookStatus): boolean => {
     hooks.session_end &&
     hooks.stop &&
     hooks.post_tool_use &&
+    hooks.user_prompt_submit &&
     hooks.notification_permission &&
     hooks.notification_idle
   );

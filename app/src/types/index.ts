@@ -11,6 +11,7 @@ export type EventType =
   | 'notification'
   | 'stop'
   | 'post_tool_use'
+  | 'user_prompt_submit'
   | 'unknown';
 
 export interface SessionInfo {
@@ -65,6 +66,7 @@ export interface HookStatus {
   session_end: boolean;
   stop: boolean;
   post_tool_use: boolean;
+  user_prompt_submit: boolean;
   notification_permission: boolean;
   notification_idle: boolean;
 }

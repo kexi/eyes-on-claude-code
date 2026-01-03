@@ -53,6 +53,10 @@ pub fn process_event(state: &mut AppState, event: EventInfo) {
         EventType::PostToolUse => {
             state.upsert_session(key, &event, SessionStatus::Active, String::new());
         }
+        EventType::UserPromptSubmit => {
+            // User submitted a prompt - Claude is now actively working
+            state.upsert_session(key, &event, SessionStatus::Active, String::new());
+        }
         EventType::Unknown => {
             if let Some(session) = state.sessions.get_mut(&key) {
                 session.last_event = event.timestamp;

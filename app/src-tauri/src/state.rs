@@ -10,6 +10,7 @@ pub enum EventType {
     Notification,
     Stop,
     PostToolUse,
+    UserPromptSubmit,
     #[serde(other)]
     Unknown,
 }

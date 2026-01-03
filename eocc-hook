@@ -104,6 +104,7 @@ case "$EVENT_TYPE" in
     session_end) EMOJI="🏁" ;;
     pre_tool_use) EMOJI="🔧" ;;
     post_tool_use) EMOJI="📝" ;;
+    user_prompt_submit) EMOJI="💬" ;;
     *) EMOJI="📌" ;;
 esac
 

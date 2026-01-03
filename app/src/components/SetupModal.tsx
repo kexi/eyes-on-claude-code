@@ -13,6 +13,7 @@ const HOOK_LABELS: Record<keyof HookStatus, string> = {
   session_end: 'SessionEnd',
   stop: 'Stop',
   post_tool_use: 'PostToolUse',
+  user_prompt_submit: 'UserPromptSubmit',
   notification_permission: 'Notification (permission_prompt)',
   notification_idle: 'Notification (idle_prompt)',
 };
@@ -24,6 +25,7 @@ const allHooksConfigured = (hooks: HookStatus): boolean => {
     hooks.session_end &&
     hooks.stop &&
     hooks.post_tool_use &&
+    hooks.user_prompt_submit &&
     hooks.notification_permission &&
     hooks.notification_idle
   );

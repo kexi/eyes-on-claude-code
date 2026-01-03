@@ -54,6 +54,9 @@ fn generate_hooks_config(hook_script_path: &str) -> serde_json::Value {
         "PostToolUse": [
             { "hooks": [{ "type": "command", "command": format!("{} post_tool_use", hook_script_path) }] }
         ],
+        "UserPromptSubmit": [
+            { "hooks": [{ "type": "command", "command": format!("{} user_prompt_submit", hook_script_path) }] }
+        ],
         "SessionStart": [
             {
                 "matcher": "startup",
@@ -77,6 +80,7 @@ pub struct HookStatus {
     pub session_end: bool,
     pub stop: bool,
     pub post_tool_use: bool,
+    pub user_prompt_submit: bool,
     pub notification_permission: bool,
     pub notification_idle: bool,
 }
@@ -88,6 +92,7 @@ impl HookStatus {
             && self.session_end
             && self.stop
             && self.post_tool_use
+            && self.user_prompt_submit
             && self.notification_permission
             && self.notification_idle
     }
@@ -220,6 +225,7 @@ pub fn check_claude_settings() -> HookStatus {
         session_end: false,
         stop: false,
         post_tool_use: false,
+        user_prompt_submit: false,
         notification_permission: false,
         notification_idle: false,
     };
@@ -271,6 +277,11 @@ pub fn check_claude_settings() -> HookStatus {
         .map(|h| has_eocc_hook_in_array(h, None))
         .unwrap_or(false);
 
+    let user_prompt_submit = hooks
+        .get("UserPromptSubmit")
+        .map(|h| has_eocc_hook_in_array(h, None))
+        .unwrap_or(false);
+
     let notification_permission = hooks
         .get("Notification")
         .map(|h| has_eocc_hook_in_array(h, Some("permission_prompt")))
@@ -286,6 +297,7 @@ pub fn check_claude_settings() -> HookStatus {
         session_end,
         stop,
         post_tool_use,
+        user_prompt_submit,
         notification_permission,
         notification_idle,
     }
