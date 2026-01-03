@@ -28,6 +28,7 @@ export const SetupModal = ({ setupStatus: initialStatus, onComplete }: SetupModa
   const [isChecking, setIsChecking] = useState(false);
   const [copied, setCopied] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [isHookStatusExpanded, setIsHookStatusExpanded] = useState(false);
 
   const copyTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const completeTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -135,21 +136,41 @@ export const SetupModal = ({ setupStatus: initialStatus, onComplete }: SetupModa
             </div>
           )}
 
-          {/* Hook Status List */}
-          <div className="bg-bg-card rounded-lg p-4">
-            <p className="text-text-primary text-sm font-medium mb-3">Hook Configuration Status:</p>
-            <div className="space-y-2">
-              {(Object.keys(HOOK_LABELS) as Array<keyof HookStatus>).map((key) => (
-                <div key={key} className="flex items-center justify-between text-sm">
-                  <span className="text-text-secondary">{HOOK_LABELS[key]}</span>
-                  {status.hooks[key] ? (
-                    <span className="text-success font-medium">OK</span>
-                  ) : (
-                    <span className="text-red-400 font-medium">NG</span>
-                  )}
-                </div>
-              ))}
-            </div>
+          {/* Hook Status List - Accordion */}
+          <div className="bg-bg-card rounded-lg overflow-hidden">
+            <button
+              onClick={() => setIsHookStatusExpanded(!isHookStatusExpanded)}
+              className="w-full p-4 flex items-center justify-between text-left hover:bg-bg-secondary/30 transition-colors"
+            >
+              <span className="text-text-primary text-sm font-medium">
+                Hook Configuration Status:
+                {!allHooksConfigured(status.hooks) && (
+                  <span className="text-red-400 ml-2">NG</span>
+                )}
+              </span>
+              <svg
+                className={`w-4 h-4 text-text-secondary transition-transform ${isHookStatusExpanded ? 'rotate-180' : ''}`}
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+              </svg>
+            </button>
+            {isHookStatusExpanded && (
+              <div className="px-4 pb-4 space-y-2">
+                {(Object.keys(HOOK_LABELS) as Array<keyof HookStatus>).map((key) => (
+                  <div key={key} className="flex items-center justify-between text-sm">
+                    <span className="text-text-secondary">{HOOK_LABELS[key]}</span>
+                    {status.hooks[key] ? (
+                      <span className="text-success font-medium">OK</span>
+                    ) : (
+                      <span className="text-red-400 font-medium">NG</span>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
 
           <div className="bg-warning/10 border border-warning/30 rounded-lg p-4">
