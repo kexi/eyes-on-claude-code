@@ -228,3 +228,9 @@ Artifacts (macOS example):
 
 - Confirm Sound is ON in the menu
 - Audio may be blocked by browser/OS restrictions (after changing settings, trigger another state change and test again)
+
+## 6. License
+
+This project is licensed under the MIT License. See `LICENSE`.
+
+For third-party license notes and how to generate a dependency license report, see `THIRD_PARTY_NOTICES.md`.

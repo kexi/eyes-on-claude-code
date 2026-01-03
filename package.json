@@ -1,12 +1,14 @@
 {
   "name": "eyes-on-claude-code",
   "version": "1.0.0",
+  "license": "MIT",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
     "preview": "vite preview",
-    "tauri": "tauri"
+    "tauri": "tauri",
+    "licenses:audit": "node scripts/audit-licenses.mjs"
   },
   "devDependencies": {
     "@tauri-apps/cli": "^2.0.0",

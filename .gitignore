@@ -8,6 +8,9 @@ src-tauri/target/
 node_modules/
 dist/
 
+# Generated reports
+license-report.json
+
 # IDE
 .idea/
 .vscode/
