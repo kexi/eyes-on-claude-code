@@ -116,19 +116,6 @@ pub struct HookStatus {
     pub notification_idle: bool,
 }
 
-impl HookStatus {
-    /// Returns true if all hooks are configured
-    pub fn all_configured(&self) -> bool {
-        self.session_start
-            && self.session_end
-            && self.stop
-            && self.post_tool_use
-            && self.user_prompt_submit
-            && self.notification_permission
-            && self.notification_idle
-    }
-}
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SetupStatus {
     pub hook_installed: bool,
