@@ -38,12 +38,19 @@ Setupモーダルの指示に従って、生成された設定を `~/.claude/set
 
 ~/.eocc/
   └── logs/
-      └── events.jsonl       # イベントキュー（アプリ処理後に削除される）
+      └── events.jsonl       # イベントキュー（アプリ処理後にクリアされる）
 ```
 
-**アプリ設定**
+**アプリデータ**
 
-- アプリ設定ファイルは Tauri の `app_data_dir/settings.json` に保存されます（例: Always on Top / opacity / sound）。
+```
+~/Library/Application Support/com.local.eyes-on-claude-code/  # macOS
+  ├── settings.json          # アプリ設定（Always on Top / opacity / sound）
+  └── runtime_state.json     # セッション状態（アプリ再起動時に復元）
+
+~/Library/Logs/com.local.eyes-on-claude-code/  # macOS
+  └── *.log                  # アプリログ（tauri-plugin-log、10MB上限でローテーション）
+```
 
 ---
 
@@ -107,7 +114,7 @@ Setupモーダルの指示に従って、生成された設定を `~/.claude/set
 - 状態表示: Active / WaitingPermission / WaitingInput / Completed
 - waiting数の可視化: トレイのツールチップ、ダッシュボードの表示、（対応環境では）バッジ
 - Recent Events: 最新イベントをメニューから確認（最大50件保持、メニュー表示は直近10件）
-- ログフォルダを開く: メニューから `~/.eocc/logs` を開く
+- ログフォルダを開く: メニューからアプリログディレクトリを開く
 - セッションクリア/削除:
   - トレイ: Clear Sessions
   - ダッシュボード: Remove session
@@ -128,6 +135,31 @@ Hookスクリプトはイベントを `events.jsonl` に追記します。
 | `stop` | 応答完了 | Completed |
 | `post_tool_use` | ツール実行後 | Active |
 | `user_prompt_submit` | プロンプト送信 | Active |
+
+### イベント処理フロー
+
+```mermaid
+sequenceDiagram
+    participant CC as Claude Code
+    participant Hook as eocc-hook
+    participant Queue as events.jsonl
+    participant App as EOCC App
+    participant Log as App Log
+
+    CC->>Hook: Hook呼び出し（stdin: event data）
+    Hook->>Queue: イベント追記（JSON行）
+
+    loop ファイル監視
+        App->>Queue: 変更検知
+        App->>App: events.jsonl → events.processing.*.jsonl<br/>（アトミックにリネーム）
+        App->>App: 空のevents.jsonlを再作成
+        App->>App: processing fileを1行ずつ処理
+        App->>Log: イベントをログに記録
+        App->>App: セッション状態を更新
+        App->>App: processing fileを削除
+        App->>App: runtime_state.jsonに保存
+    end
+```
 
 ---
 
@@ -184,11 +216,12 @@ pnpm tauri build
 
 ### ログが増えない / セッションが表示されない
 
-- `~/.eocc/logs/console.log` を確認
-  - `tail -f ~/.eocc/logs/console.log`
-- `~/.eocc/logs/stdin-debug.log` でHookが呼ばれているか確認
+- アプリログを確認
+  - `ls -la ~/Library/Logs/com.local.eyes-on-claude-code/`
+  - `cat ~/Library/Logs/com.local.eyes-on-claude-code/*.log | grep -i error`
 - `events.jsonl` が作成/更新されているか確認
   - `ls -la ~/.eocc/logs/`
+- Hookが呼ばれているか確認（Claude Codeで `/hooks` を実行）
 
 ### セッションが unknown になる
 
