@@ -1,6 +1,7 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import type { SetupStatus, HookStatus } from '@/types';
 import { checkClaudeSettings } from '@/lib/tauri';
+import { allHooksConfigured } from '@/lib/utils';
 
 interface SetupModalProps {
   setupStatus: SetupStatus;
@@ -16,19 +17,6 @@ const HOOK_LABELS: Record<keyof HookStatus, string> = {
   user_prompt_submit: 'UserPromptSubmit',
   notification_permission: 'Notification (permission_prompt)',
   notification_idle: 'Notification (idle_prompt)',
-};
-
-// Check if all hooks are configured
-const allHooksConfigured = (hooks: HookStatus): boolean => {
-  return (
-    hooks.session_start &&
-    hooks.session_end &&
-    hooks.stop &&
-    hooks.post_tool_use &&
-    hooks.user_prompt_submit &&
-    hooks.notification_permission &&
-    hooks.notification_idle
-  );
 };
 
 export const SetupModal = ({ setupStatus: initialStatus, onComplete }: SetupModalProps) => {

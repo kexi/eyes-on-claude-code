@@ -1,4 +1,4 @@
-import type { SessionStatus, EventType, NotificationType } from '@/types';
+import type { SessionStatus, EventType, NotificationType, HookStatus } from '@/types';
 
 export const getStatusEmoji = (status: SessionStatus): string => {
   switch (status) {
@@ -63,6 +63,8 @@ export const getEventEmoji = (event: EventType, notificationType?: NotificationT
       return '🏁';
     case 'post_tool_use':
       return '🔧';
+    case 'user_prompt_submit':
+      return '💬';
     default:
       return '📌';
   }
@@ -75,4 +77,16 @@ export const formatTime = (timestamp: string): string => {
   } catch {
     return timestamp;
   }
+};
+
+export const allHooksConfigured = (hooks: HookStatus): boolean => {
+  return (
+    hooks.session_start &&
+    hooks.session_end &&
+    hooks.stop &&
+    hooks.post_tool_use &&
+    hooks.user_prompt_submit &&
+    hooks.notification_permission &&
+    hooks.notification_idle
+  );
 };
