@@ -51,6 +51,9 @@ fn generate_hooks_config(hook_script_path: &str) -> serde_json::Value {
         "Stop": [
             { "hooks": [{ "type": "command", "command": format!("{} stop", hook_script_path) }] }
         ],
+        "PostToolUse": [
+            { "hooks": [{ "type": "command", "command": format!("{} post_tool_use", hook_script_path) }] }
+        ],
         "SessionStart": [
             {
                 "matcher": "startup",
@@ -67,11 +70,34 @@ fn generate_hooks_config(hook_script_path: &str) -> serde_json::Value {
     })
 }
 
+/// Status of each individual hook type
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct HookStatus {
+    pub session_start: bool,
+    pub session_end: bool,
+    pub stop: bool,
+    pub post_tool_use: bool,
+    pub notification_permission: bool,
+    pub notification_idle: bool,
+}
+
+impl HookStatus {
+    /// Returns true if all hooks are configured
+    pub fn all_configured(&self) -> bool {
+        self.session_start
+            && self.session_end
+            && self.stop
+            && self.post_tool_use
+            && self.notification_permission
+            && self.notification_idle
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SetupStatus {
     pub hook_installed: bool,
     pub hook_path: String,
-    pub claude_settings_configured: bool,
+    pub hooks: HookStatus,
     pub merged_settings: String,
     pub init_error: Option<String>,
 }
@@ -156,13 +182,21 @@ fn is_eocc_hook_command(command: &str) -> bool {
     command.contains("eocc-hook ") || command.ends_with("eocc-hook")
 }
 
-/// Check if a hook array contains at least one eocc-hook command
-fn has_eocc_hook_in_array(hooks_array: &serde_json::Value) -> bool {
+/// Check if a hook array contains eocc-hook command, optionally with a specific matcher
+fn has_eocc_hook_in_array(hooks_array: &serde_json::Value, required_matcher: Option<&str>) -> bool {
     let Some(arr) = hooks_array.as_array() else {
         return false;
     };
 
     for hook_entry in arr {
+        // Check matcher if required
+        if let Some(matcher) = required_matcher {
+            let entry_matcher = hook_entry.get("matcher").and_then(|m| m.as_str());
+            if entry_matcher != Some(matcher) {
+                continue;
+            }
+        }
+
         // Each entry can have a "hooks" array with commands
         if let Some(hooks) = hook_entry.get("hooks") {
             if let Some(hooks_arr) = hooks.as_array() {
@@ -179,19 +213,28 @@ fn has_eocc_hook_in_array(hooks_array: &serde_json::Value) -> bool {
     false
 }
 
-/// Check if Claude settings.json has the required hooks configuration
-pub fn check_claude_settings(_hook_script_path: &str) -> bool {
+/// Check each hook type in Claude settings.json and return detailed status
+pub fn check_claude_settings() -> HookStatus {
+    let default_status = HookStatus {
+        session_start: false,
+        session_end: false,
+        stop: false,
+        post_tool_use: false,
+        notification_permission: false,
+        notification_idle: false,
+    };
+
     let Some(settings_path) = get_claude_settings_path() else {
-        return false;
+        return default_status;
     };
 
     if !settings_path.exists() {
-        return false;
+        return default_status;
     }
 
     let content = match fs::read_to_string(&settings_path) {
         Ok(c) => c,
-        Err(_) => return false,
+        Err(_) => return default_status,
     };
 
     // Strip JSONC comments before parsing
@@ -199,23 +242,53 @@ pub fn check_claude_settings(_hook_script_path: &str) -> bool {
 
     let settings: serde_json::Value = match serde_json::from_str(&json_content) {
         Ok(v) => v,
-        Err(_) => return false,
+        Err(_) => return default_status,
     };
 
     // Check if hooks section exists
     let Some(hooks) = settings.get("hooks") else {
-        return false;
+        return default_status;
     };
 
-    // Verify that at least SessionStart has eocc-hook configured
-    // This is the minimum requirement for the app to function
-    if let Some(session_start) = hooks.get("SessionStart") {
-        if has_eocc_hook_in_array(session_start) {
-            return true;
-        }
-    }
+    // Check each hook type
+    let session_start = hooks
+        .get("SessionStart")
+        .map(|h| has_eocc_hook_in_array(h, None))
+        .unwrap_or(false);
 
-    false
+    let session_end = hooks
+        .get("SessionEnd")
+        .map(|h| has_eocc_hook_in_array(h, None))
+        .unwrap_or(false);
+
+    let stop = hooks
+        .get("Stop")
+        .map(|h| has_eocc_hook_in_array(h, None))
+        .unwrap_or(false);
+
+    let post_tool_use = hooks
+        .get("PostToolUse")
+        .map(|h| has_eocc_hook_in_array(h, None))
+        .unwrap_or(false);
+
+    let notification_permission = hooks
+        .get("Notification")
+        .map(|h| has_eocc_hook_in_array(h, Some("permission_prompt")))
+        .unwrap_or(false);
+
+    let notification_idle = hooks
+        .get("Notification")
+        .map(|h| has_eocc_hook_in_array(h, Some("idle_prompt")))
+        .unwrap_or(false);
+
+    HookStatus {
+        session_start,
+        session_end,
+        stop,
+        post_tool_use,
+        notification_permission,
+        notification_idle,
+    }
 }
 
 /// Strip JSONC comments (// and /* */) from content
@@ -361,7 +434,7 @@ pub fn get_setup_status(app: &tauri::AppHandle) -> SetupStatus {
     let tilde_path = "~/.local/bin/eocc-hook".to_string();
 
     let hook_installed = is_hook_installed(app);
-    let claude_settings_configured = check_claude_settings(&tilde_path);
+    let hooks = check_claude_settings();
 
     let merged_settings = generate_merged_settings(&tilde_path).unwrap_or_else(|e| {
         format!("{{\"error\": \"{}\"}}", e)
@@ -372,7 +445,7 @@ pub fn get_setup_status(app: &tauri::AppHandle) -> SetupStatus {
     SetupStatus {
         hook_installed,
         hook_path: tilde_path,
-        claude_settings_configured,
+        hooks,
         merged_settings,
         init_error,
     }

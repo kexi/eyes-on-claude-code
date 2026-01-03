@@ -8,7 +8,19 @@ import { SessionList } from '@/components/SessionList';
 import { EventList } from '@/components/EventList';
 import { SetupModal } from '@/components/SetupModal';
 import { onWindowFocus, bringDiffWindowsToFront, getSetupStatus } from '@/lib/tauri';
-import type { SetupStatus } from '@/types';
+import type { SetupStatus, HookStatus } from '@/types';
+
+// Check if all hooks are configured
+const allHooksConfigured = (hooks: HookStatus): boolean => {
+  return (
+    hooks.session_start &&
+    hooks.session_end &&
+    hooks.stop &&
+    hooks.post_tool_use &&
+    hooks.notification_permission &&
+    hooks.notification_idle
+  );
+};
 
 const Dashboard = () => {
   const { dashboardData, settings, isLoading, refreshData } = useAppContext();
@@ -84,7 +96,8 @@ function App() {
     getSetupStatus()
       .then((status) => {
         setSetupStatus(status);
-        if (!status.claude_settings_configured || status.init_error) {
+        // Show modal if any hook is missing or there's an init error
+        if (!allHooksConfigured(status.hooks) || status.init_error) {
           setShowSetupModal(true);
         }
         setSetupChecked(true);

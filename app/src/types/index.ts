@@ -59,11 +59,21 @@ export interface GitInfo {
 // Diff type for difit integration
 export type DiffType = 'unstaged' | 'staged' | 'commit' | 'branch';
 
+// Status of each individual hook type
+export interface HookStatus {
+  session_start: boolean;
+  session_end: boolean;
+  stop: boolean;
+  post_tool_use: boolean;
+  notification_permission: boolean;
+  notification_idle: boolean;
+}
+
 // Setup status for installation flow
 export interface SetupStatus {
   hook_installed: boolean;
   hook_path: string;
-  claude_settings_configured: boolean;
+  hooks: HookStatus;
   merged_settings: string;
   init_error: string | null;
 }

@@ -1,11 +1,33 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
-import type { SetupStatus } from '@/types';
+import type { SetupStatus, HookStatus } from '@/types';
 import { checkClaudeSettings } from '@/lib/tauri';
 
 interface SetupModalProps {
   setupStatus: SetupStatus;
   onComplete: () => void;
 }
+
+// Hook display names
+const HOOK_LABELS: Record<keyof HookStatus, string> = {
+  session_start: 'SessionStart',
+  session_end: 'SessionEnd',
+  stop: 'Stop',
+  post_tool_use: 'PostToolUse',
+  notification_permission: 'Notification (permission_prompt)',
+  notification_idle: 'Notification (idle_prompt)',
+};
+
+// Check if all hooks are configured
+const allHooksConfigured = (hooks: HookStatus): boolean => {
+  return (
+    hooks.session_start &&
+    hooks.session_end &&
+    hooks.stop &&
+    hooks.post_tool_use &&
+    hooks.notification_permission &&
+    hooks.notification_idle
+  );
+};
 
 export const SetupModal = ({ setupStatus: initialStatus, onComplete }: SetupModalProps) => {
   const [status, setStatus] = useState<SetupStatus>(initialStatus);
@@ -39,7 +61,7 @@ export const SetupModal = ({ setupStatus: initialStatus, onComplete }: SetupModa
     try {
       const newStatus = await checkClaudeSettings();
       setStatus(newStatus);
-      if (newStatus.claude_settings_configured) {
+      if (allHooksConfigured(newStatus.hooks) && !newStatus.init_error) {
         if (completeTimeoutRef.current) clearTimeout(completeTimeoutRef.current);
         completeTimeoutRef.current = setTimeout(onComplete, 1500);
       }
@@ -50,7 +72,9 @@ export const SetupModal = ({ setupStatus: initialStatus, onComplete }: SetupModa
     }
   }, [onComplete]);
 
-  if (status.claude_settings_configured && !status.init_error) {
+  const isAllConfigured = allHooksConfigured(status.hooks) && !status.init_error;
+
+  if (isAllConfigured) {
     return (
       <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
         <div className="bg-bg-primary rounded-xl p-6 max-w-md w-full mx-4 shadow-2xl">
@@ -83,11 +107,28 @@ export const SetupModal = ({ setupStatus: initialStatus, onComplete }: SetupModa
             </div>
           )}
 
+          {/* Hook Status List */}
+          <div className="bg-bg-card rounded-lg p-4">
+            <p className="text-text-primary text-sm font-medium mb-3">Hook Configuration Status:</p>
+            <div className="space-y-2">
+              {(Object.keys(HOOK_LABELS) as Array<keyof HookStatus>).map((key) => (
+                <div key={key} className="flex items-center justify-between text-sm">
+                  <span className="text-text-secondary">{HOOK_LABELS[key]}</span>
+                  {status.hooks[key] ? (
+                    <span className="text-success font-medium">OK</span>
+                  ) : (
+                    <span className="text-red-400 font-medium">NG</span>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+
           <div className="bg-warning/10 border border-warning/30 rounded-lg p-4">
             <p className="text-text-primary text-sm">
-              Claude Code hooks are not configured. The following settings are your existing{' '}
+              Some hooks are not configured. Please copy the settings below and replace your{' '}
               <code className="bg-bg-card px-1.5 py-0.5 rounded text-xs">~/.claude/settings.json</code>{' '}
-              merged with the required hooks configuration. Please review and replace your settings file with the content below:
+              file:
             </p>
           </div>
 
