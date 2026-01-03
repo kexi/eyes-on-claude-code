@@ -118,7 +118,8 @@ fn build_help_events_submenu<R: Runtime>(
 ///
 /// Structure:
 /// - Eyes on Claude Code: About, Quit
-/// - Window: Open Dashboard, Always on Top, Opacity, Sound
+/// - Edit: Undo, Redo, Cut, Copy, Paste, Find
+/// - Window: Close, Open Dashboard, Always on Top, Opacity, Sound
 /// - Help: Open Log Directory, Recent Events
 pub fn build_app_menu<R: Runtime>(
     app: &tauri::AppHandle<R>,
@@ -135,7 +136,23 @@ pub fn build_app_menu<R: Runtime>(
         .quit()
         .build()?;
 
+    // Edit menu (standard editing commands)
+    let edit_menu = SubmenuBuilder::new(app, "Edit")
+        .undo()
+        .redo()
+        .separator()
+        .cut()
+        .copy()
+        .paste()
+        .separator()
+        .item(&MenuItemBuilder::with_id("find", "Find")
+            .accelerator("CmdOrCtrl+F")
+            .build(app)?)
+        .build()?;
+
     // Window menu
+    let close_window = PredefinedMenuItem::close_window(app, Some("Close Window"))?;
+
     let open_dashboard = MenuItemBuilder::with_id("open_dashboard", "Open Dashboard")
         .accelerator("CmdOrCtrl+D")
         .build(app)?;
@@ -152,6 +169,8 @@ pub fn build_app_menu<R: Runtime>(
         .build(app)?;
 
     let window_menu = SubmenuBuilder::new(app, "Window")
+        .item(&close_window)
+        .separator()
         .item(&open_dashboard)
         .separator()
         .item(&always_on_top)
@@ -172,6 +191,7 @@ pub fn build_app_menu<R: Runtime>(
     // Build the menu bar
     let menu = MenuBuilder::new(app)
         .item(&app_menu)
+        .item(&edit_menu)
         .item(&window_menu)
         .item(&help_menu)
         .build()?;
