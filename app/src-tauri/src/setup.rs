@@ -41,25 +41,22 @@ static INIT_ERROR: Mutex<Option<String>> = Mutex::new(None);
 
 /// Set the initialization error (called from main.rs on setup failure)
 pub fn set_init_error(error: String) {
-    match INIT_ERROR.lock() {
-        Ok(mut guard) => {
-            *guard = Some(error);
-        }
-        Err(e) => {
-            eprintln!("[eocc] Failed to set init error (lock poisoned): {:?}", e);
-        }
-    }
+    // Use unwrap_or_else to recover from poisoned mutex
+    let mut guard = INIT_ERROR.lock().unwrap_or_else(|e| {
+        eprintln!("[eocc] Mutex was poisoned, recovering: {:?}", e);
+        e.into_inner()
+    });
+    *guard = Some(error);
 }
 
 /// Get the initialization error if any
 pub fn get_init_error() -> Option<String> {
-    match INIT_ERROR.lock() {
-        Ok(guard) => guard.clone(),
-        Err(e) => {
-            eprintln!("[eocc] Failed to get init error (lock poisoned): {:?}", e);
-            None
-        }
-    }
+    // Use unwrap_or_else to recover from poisoned mutex
+    let guard = INIT_ERROR.lock().unwrap_or_else(|e| {
+        eprintln!("[eocc] Mutex was poisoned, recovering: {:?}", e);
+        e.into_inner()
+    });
+    guard.clone()
 }
 
 /// Embedded hook script content
@@ -181,8 +178,20 @@ pub fn install_hook_script(app: &tauri::AppHandle) -> Result<PathBuf, String> {
             fs::create_dir_all(parent)
                 .map_err(|e| format!("Failed to create symlink directory: {:?}", e))?;
         }
-        // Remove existing symlink if present
-        let _ = fs::remove_file(&symlink_path);
+        // Check existing file before removing
+        if symlink_path.exists() {
+            let metadata = fs::symlink_metadata(&symlink_path)
+                .map_err(|e| format!("Failed to read symlink metadata: {:?}", e))?;
+            if metadata.file_type().is_symlink() {
+                fs::remove_file(&symlink_path)
+                    .map_err(|e| format!("Failed to remove existing symlink: {:?}", e))?;
+            } else {
+                return Err(format!(
+                    "Path {} exists and is not a symlink. Please remove it manually.",
+                    symlink_path.display()
+                ));
+            }
+        }
         std::os::unix::fs::symlink(&hook_path, &symlink_path)
             .map_err(|e| format!("Failed to create symlink: {:?}", e))?;
     }
@@ -199,9 +208,16 @@ pub fn is_hook_installed(app: &tauri::AppHandle) -> bool {
 
 /// Check if a hook command contains our hook script
 fn is_eocc_hook_command(command: &str) -> bool {
-    // Check if the command contains eocc-hook as a standalone word
-    // This avoids false positives like "my-eocc-hook-wrapper"
-    command.contains("eocc-hook ") || command.ends_with("eocc-hook")
+    // Check for eocc-hook as a standalone command or at end of a path
+    // Valid patterns:
+    //   "eocc-hook ..."           - command starts with eocc-hook
+    //   "/path/to/eocc-hook ..."  - path ending with /eocc-hook
+    //   "~/.local/bin/eocc-hook"  - tilde path
+    //   ".../eocc-hook"           - ends with /eocc-hook
+    command.starts_with("eocc-hook ")
+        || command == "eocc-hook"
+        || command.contains("/eocc-hook ")
+        || command.ends_with("/eocc-hook")
 }
 
 /// Check if a hook array contains eocc-hook command, optionally with a specific matcher
@@ -468,7 +484,7 @@ pub fn get_setup_status(app: &tauri::AppHandle) -> SetupStatus {
     let hooks = check_claude_settings();
 
     let merged_settings = generate_merged_settings(&tilde_path).unwrap_or_else(|e| {
-        format!("{{\"error\": \"{}\"}}", e)
+        serde_json::json!({"error": e}).to_string()
     });
 
     let init_error = get_init_error();
