@@ -3,34 +3,32 @@ import { AppProvider, useAppContext } from '@/context/AppContext';
 import { useWindowOpacity } from '@/hooks/useWindowOpacity';
 import { useWindowDrag } from '@/hooks/useWindowDrag';
 import { Header } from '@/components/Header';
-import { StatsGrid } from '@/components/StatsGrid';
 import { SessionList } from '@/components/SessionList';
-import { EventList } from '@/components/EventList';
 import { SetupModal } from '@/components/SetupModal';
-import { onWindowFocus, bringDiffWindowsToFront, getSetupStatus } from '@/lib/tauri';
+import {
+  onWindowFocus,
+  bringDiffWindowsToFront,
+  getSetupStatus,
+  setWindowSizeForSetup,
+} from '@/lib/tauri';
 import { allHooksConfigured } from '@/lib/utils';
 import type { SetupStatus } from '@/types';
 
 const Dashboard = () => {
   const { dashboardData, settings, isLoading, refreshData } = useAppContext();
-  const isMiniView = settings.mini_view;
 
-  // Apply mini-view class to body
+  // Always apply mini-view class to body
   useEffect(() => {
-    if (isMiniView) {
-      document.body.classList.add('mini-view');
-    } else {
-      document.body.classList.remove('mini-view');
-    }
+    document.body.classList.add('mini-view');
     return () => {
       document.body.classList.remove('mini-view');
     };
-  }, [isMiniView]);
+  }, []);
 
   // Handle window opacity based on focus
   useWindowOpacity(settings.opacity_active, settings.opacity_inactive);
 
-  // Handle window drag in mini-view mode
+  // Handle window drag
   useWindowDrag();
 
   // Bring diff windows to front when dashboard is focused (via Cmd+Tab etc.)
@@ -46,31 +44,16 @@ const Dashboard = () => {
 
   if (isLoading) {
     return (
-      <div className="container bg-bg-primary h-screen rounded-xl max-w-[900px] mx-auto p-5 flex items-center justify-center">
+      <div className="container bg-bg-primary h-screen rounded-xl max-w-[900px] mx-auto p-2.5 flex items-center justify-center">
         <div className="text-text-secondary">Loading...</div>
       </div>
     );
   }
 
   return (
-    <div
-      className={`container bg-bg-primary h-screen rounded-xl max-w-[900px] mx-auto overflow-y-auto ${
-        isMiniView ? 'p-2.5' : 'p-5'
-      }`}
-    >
-      <Header sessions={dashboardData.sessions} isMiniView={isMiniView} />
-
-      {!isMiniView && (
-        <StatsGrid sessions={dashboardData.sessions} events={dashboardData.events} />
-      )}
-
-      <SessionList
-        sessions={dashboardData.sessions}
-        isMiniView={isMiniView}
-        onRefresh={refreshData}
-      />
-
-      {!isMiniView && <EventList events={dashboardData.events} />}
+    <div className="container bg-bg-primary h-screen rounded-xl max-w-[900px] mx-auto overflow-y-auto p-2.5">
+      <Header sessions={dashboardData.sessions} />
+      <SessionList sessions={dashboardData.sessions} onRefresh={refreshData} />
     </div>
   );
 };
@@ -88,6 +71,8 @@ function App() {
         // Show modal if any hook is missing or there's an init error
         if (!allHooksConfigured(status.hooks) || status.init_error) {
           setShowSetupModal(true);
+          // Enlarge window for setup modal
+          setWindowSizeForSetup(true).catch(console.error);
         }
         setSetupChecked(true);
       })
@@ -99,6 +84,8 @@ function App() {
 
   const handleSetupComplete = () => {
     setShowSetupModal(false);
+    // Restore miniview size
+    setWindowSizeForSetup(false).catch(console.error);
   };
 
   // Wait for setup check before showing anything

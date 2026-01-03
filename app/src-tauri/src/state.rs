@@ -85,8 +85,6 @@ pub struct DashboardData {
 pub struct Settings {
     #[serde(default = "Settings::default_always_on_top")]
     pub always_on_top: bool,
-    #[serde(default = "Settings::default_mini_view")]
-    pub mini_view: bool,
     #[serde(default = "Settings::default_opacity_active")]
     pub opacity_active: f64,
     #[serde(default = "Settings::default_opacity_inactive")]
@@ -97,17 +95,12 @@ pub struct Settings {
 
 impl Settings {
     pub const DEFAULT_ALWAYS_ON_TOP: bool = true;
-    pub const DEFAULT_MINI_VIEW: bool = true;
     pub const DEFAULT_OPACITY_ACTIVE: f64 = 1.0;
     pub const DEFAULT_OPACITY_INACTIVE: f64 = 0.3;
     pub const DEFAULT_SOUND_ENABLED: bool = true;
 
     fn default_always_on_top() -> bool {
         Self::DEFAULT_ALWAYS_ON_TOP
-    }
-
-    fn default_mini_view() -> bool {
-        Self::DEFAULT_MINI_VIEW
     }
 
     fn default_opacity_active() -> f64 {
@@ -127,7 +120,6 @@ impl Default for Settings {
     fn default() -> Self {
         Self {
             always_on_top: Self::DEFAULT_ALWAYS_ON_TOP,
-            mini_view: Self::DEFAULT_MINI_VIEW,
             opacity_active: Self::DEFAULT_OPACITY_ACTIVE,
             opacity_inactive: Self::DEFAULT_OPACITY_INACTIVE,
             sound_enabled: Self::DEFAULT_SOUND_ENABLED,

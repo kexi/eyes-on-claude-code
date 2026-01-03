@@ -41,7 +41,6 @@ export interface DashboardData {
 
 export interface Settings {
   always_on_top: boolean;
-  mini_view: boolean;
   opacity_active: number;
   opacity_inactive: number;
   sound_enabled: boolean;

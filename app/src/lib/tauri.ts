@@ -20,6 +20,8 @@ export const openDiff = (projectDir: string, diffType: DiffType, baseBranch?: st
 export const getSetupStatus = () => invoke<SetupStatus>('get_setup_status');
 export const checkClaudeSettings = () => invoke<SetupStatus>('check_claude_settings');
 export const openClaudeSettings = () => invoke('open_claude_settings');
+export const setWindowSizeForSetup = (enlarged: boolean) =>
+  invoke('set_window_size_for_setup', { enlarged });
 
 // Window operations
 export const getAppWindow = () => {

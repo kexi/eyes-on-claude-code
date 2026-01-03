@@ -67,33 +67,19 @@ pub fn set_always_on_top(
     Ok(())
 }
 
+/// Set window size for setup modal (enlarged) or normal miniview
 #[tauri::command]
-pub fn get_mini_view(state: tauri::State<'_, ManagedState>) -> Result<bool, String> {
-    let state_guard = state.0.lock().map_err(|_| LOCK_ERROR)?;
-    Ok(state_guard.settings.mini_view)
-}
-
-#[tauri::command]
-pub fn set_mini_view(
-    enabled: bool,
-    state: tauri::State<'_, ManagedState>,
-    app: tauri::AppHandle,
-) -> Result<(), String> {
-    let mut state_guard = state.0.lock().map_err(|_| LOCK_ERROR)?;
-    state_guard.settings.mini_view = enabled;
-    save_settings(&app, &state_guard.settings);
-
+pub fn set_window_size_for_setup(enlarged: bool, app: tauri::AppHandle) -> Result<(), String> {
     if let Some(window) = app.get_webview_window("dashboard") {
-        let _ = window.set_decorations(!enabled);
-        if enabled {
-            let _ = window.set_size(tauri::LogicalSize::new(MINI_VIEW_WIDTH, MINI_VIEW_HEIGHT));
-        } else {
+        if enlarged {
+            let _ = window.set_decorations(true);
             let _ = window.set_size(tauri::LogicalSize::new(NORMAL_VIEW_WIDTH, NORMAL_VIEW_HEIGHT));
             let _ = window.center();
+        } else {
+            let _ = window.set_decorations(false);
+            let _ = window.set_size(tauri::LogicalSize::new(MINI_VIEW_WIDTH, MINI_VIEW_HEIGHT));
         }
     }
-
-    update_tray_and_badge(&app, &state_guard);
     Ok(())
 }
 

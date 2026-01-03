@@ -21,7 +21,6 @@ interface AppContextValue {
 const defaultDashboardData: DashboardData = { sessions: [], events: [] };
 const defaultSettings: Settings = {
   always_on_top: true,
-  mini_view: true,
   opacity_active: 1.0,
   opacity_inactive: 0.3,
   sound_enabled: true,

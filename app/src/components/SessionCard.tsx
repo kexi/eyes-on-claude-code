@@ -7,10 +7,9 @@ import { DiffButton } from './DiffButton';
 
 interface SessionCardProps {
   session: SessionInfo;
-  isMiniView: boolean;
 }
 
-export const SessionCard = ({ session, isMiniView }: SessionCardProps) => {
+export const SessionCard = ({ session }: SessionCardProps) => {
   const [isExpanded, setIsExpanded] = useState(false);
   const [gitInfo, setGitInfo] = useState<GitInfo | null>(null);
   const [isLoadingGit, setIsLoadingGit] = useState(false);
@@ -26,8 +25,7 @@ export const SessionCard = ({ session, isMiniView }: SessionCardProps) => {
     }
   }, [error]);
 
-  const handleRemove = async (e: React.MouseEvent) => {
-    e.stopPropagation();
+  const handleRemove = async () => {
     try {
       await removeSession(session.project_dir);
     } catch (error) {
@@ -36,7 +34,6 @@ export const SessionCard = ({ session, isMiniView }: SessionCardProps) => {
   };
 
   const handleToggleExpand = () => {
-    if (isMiniView) return;
     setIsExpanded(!isExpanded);
   };
 
@@ -80,10 +77,14 @@ export const SessionCard = ({ session, isMiniView }: SessionCardProps) => {
     active: 'border-l-4 border-success',
   }[statusClass];
 
-  if (isMiniView) {
-    return (
+  return (
+    <div
+      className={`bg-bg-secondary rounded-xl transition-all hover:shadow-lg hover:shadow-black/30 ${borderColor} overflow-hidden`}
+    >
+      {/* Header - Clickable to expand */}
       <div
-        className={`bg-bg-secondary rounded-xl flex items-center transition-all hover:-translate-y-0.5 hover:shadow-lg hover:shadow-black/30 ${borderColor} p-2 gap-2 flex-wrap`}
+        className="flex items-center p-2 gap-2 cursor-pointer"
+        onClick={handleToggleExpand}
       >
         <div className="text-base w-6 shrink-0 text-center">
           {getStatusEmoji(session.status)}
@@ -99,75 +100,39 @@ export const SessionCard = ({ session, isMiniView }: SessionCardProps) => {
             </div>
           )}
         </div>
-      </div>
-    );
-  }
-
-  return (
-    <div
-      className={`bg-bg-secondary rounded-xl transition-all hover:shadow-lg hover:shadow-black/30 ${borderColor} overflow-hidden`}
-    >
-      {/* Header - Always visible */}
-      <div
-        className="flex items-center p-4 px-5 gap-4 cursor-pointer"
-        onClick={handleToggleExpand}
-      >
-        <div className="text-2xl w-10 text-center">{getStatusEmoji(session.status)}</div>
-
-        <div className="flex-1 min-w-0 overflow-hidden">
-          <div className="font-semibold truncate mb-1">{session.project_name}</div>
-          <div className="font-mono text-text-secondary truncate text-xs">
-            {session.project_dir}
-          </div>
-          {session.waiting_for && (
-            <div className="text-warning bg-warning/10 rounded inline-block mt-1 truncate max-w-full text-xs py-1 px-2">
-              ⏸ {session.waiting_for}
-            </div>
-          )}
-        </div>
-
-        <div className="flex items-center gap-3">
-          <button
-            onClick={handleRemove}
-            className="w-7 h-7 rounded-md border border-text-secondary text-text-secondary flex items-center justify-center transition-all hover:bg-accent hover:border-accent hover:text-white remove-btn"
-            title="Remove session"
-          >
-            ×
-          </button>
-          <div
-            className={`w-6 h-6 flex items-center justify-center transition-transform ${
-              isExpanded ? 'rotate-180' : ''
-            }`}
-          >
-            <ChevronDownIcon className="text-text-secondary" />
-          </div>
+        <div
+          className={`w-4 h-4 flex items-center justify-center transition-transform shrink-0 ${
+            isExpanded ? 'rotate-180' : ''
+          }`}
+        >
+          <ChevronDownIcon className="text-text-secondary w-3 h-3" />
         </div>
       </div>
 
-      {/* Expanded content - Git info */}
+      {/* Expanded content - Git info and actions */}
       {isExpanded && (
-        <div className="border-t border-bg-card px-5 py-3 space-y-2">
+        <div className="border-t border-bg-card px-2 py-2 space-y-1.5">
           {error && (
-            <div className="text-red-400 bg-red-400/10 rounded px-3 py-2 text-sm flex items-center justify-between">
-              <span>{error}</span>
+            <div className="text-red-400 bg-red-400/10 rounded px-2 py-1 text-[0.625rem] flex items-center justify-between">
+              <span className="truncate">{error}</span>
               <button
                 onClick={() => setError(null)}
-                className="text-red-400 hover:text-red-300 ml-2"
+                className="text-red-400 hover:text-red-300 ml-1 shrink-0"
               >
                 ×
               </button>
             </div>
           )}
           {isLoadingGit ? (
-            <div className="text-text-secondary text-sm">Loading git info...</div>
+            <div className="text-text-secondary text-[0.625rem]">Loading git info...</div>
           ) : gitInfo?.is_git_repo ? (
             <>
               {/* Unstaged changes */}
-              <div className="flex items-center justify-between py-1.5">
-                <div className="flex items-center gap-2">
-                  <span className="text-text-secondary text-sm">unstaged:</span>
+              <div className="flex items-center justify-between py-0.5">
+                <div className="flex items-center gap-1">
+                  <span className="text-text-secondary text-[0.625rem]">unstaged:</span>
                   <span
-                    className={`text-sm ${
+                    className={`text-[0.625rem] ${
                       gitInfo.has_unstaged_changes ? 'text-orange-400' : 'text-text-secondary'
                     }`}
                   >
@@ -175,16 +140,16 @@ export const SessionCard = ({ session, isMiniView }: SessionCardProps) => {
                   </span>
                 </div>
                 {gitInfo.has_unstaged_changes && (
-                  <DiffButton onClick={() => handleDiffClick('unstaged')} />
+                  <DiffButton onClick={() => handleDiffClick('unstaged')} small />
                 )}
               </div>
 
               {/* Staged changes */}
-              <div className="flex items-center justify-between py-1.5">
-                <div className="flex items-center gap-2">
-                  <span className="text-text-secondary text-sm">staged:</span>
+              <div className="flex items-center justify-between py-0.5">
+                <div className="flex items-center gap-1">
+                  <span className="text-text-secondary text-[0.625rem]">staged:</span>
                   <span
-                    className={`text-sm ${
+                    className={`text-[0.625rem] ${
                       gitInfo.has_staged_changes ? 'text-green-400' : 'text-text-secondary'
                     }`}
                   >
@@ -192,32 +157,41 @@ export const SessionCard = ({ session, isMiniView }: SessionCardProps) => {
                   </span>
                 </div>
                 {gitInfo.has_staged_changes && (
-                  <DiffButton onClick={() => handleDiffClick('staged')} />
+                  <DiffButton onClick={() => handleDiffClick('staged')} small />
                 )}
               </div>
 
               {/* Latest commit */}
-              <div className="flex items-center justify-between py-1.5">
-                <div className="flex items-center gap-2">
-                  <span className="text-text-secondary text-sm">latest commit:</span>
-                  <span className="text-info text-sm font-mono">#{gitInfo.latest_commit_hash}</span>
-                  <span className="text-text-secondary text-sm">{gitInfo.latest_commit_time}</span>
+              <div className="flex items-center justify-between py-0.5">
+                <div className="flex items-center gap-1 min-w-0">
+                  <span className="text-text-secondary text-[0.625rem] shrink-0">commit:</span>
+                  <span className="text-info text-[0.625rem] font-mono">#{gitInfo.latest_commit_hash}</span>
                 </div>
-                <DiffButton onClick={() => handleDiffClick('commit')} />
+                <DiffButton onClick={() => handleDiffClick('commit')} small />
               </div>
 
               {/* Branch */}
-              <div className="flex items-center justify-between py-1.5">
-                <div className="flex items-center gap-2">
-                  <span className="text-text-secondary text-sm">branch:</span>
-                  <span className="text-success text-sm">{gitInfo.branch}</span>
+              <div className="flex items-center justify-between py-0.5">
+                <div className="flex items-center gap-1">
+                  <span className="text-text-secondary text-[0.625rem]">branch:</span>
+                  <span className="text-success text-[0.625rem] truncate">{gitInfo.branch}</span>
                 </div>
-                <DiffButton onClick={() => handleDiffClick('branch')} />
+                <DiffButton onClick={() => handleDiffClick('branch')} small />
               </div>
             </>
           ) : (
-            <div className="text-text-secondary text-sm">Not a git repository</div>
+            <div className="text-text-secondary text-[0.625rem]">Not a git repository</div>
           )}
+
+          {/* Remove session button */}
+          <div className="pt-1.5 border-t border-bg-card">
+            <button
+              onClick={handleRemove}
+              className="w-full py-1 px-2 text-[0.625rem] text-text-secondary hover:text-white hover:bg-red-500/20 rounded transition-colors"
+            >
+              Remove session
+            </button>
+          </div>
         </div>
       )}
     </div>

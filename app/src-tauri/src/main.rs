@@ -25,13 +25,11 @@ use difit::DifitProcessRegistry;
 
 use commands::{
     check_claude_settings, clear_all_sessions, get_always_on_top, get_dashboard_data,
-    get_mini_view, get_repo_git_info, get_settings, get_setup_status, install_hook,
-    open_claude_settings, open_diff, remove_session, set_always_on_top, set_mini_view,
-    set_opacity_active, set_opacity_inactive,
+    get_repo_git_info, get_settings, get_setup_status, install_hook, open_claude_settings,
+    open_diff, remove_session, set_always_on_top, set_opacity_active, set_opacity_inactive,
+    set_window_size_for_setup,
 };
-use constants::{
-    ICON_NORMAL, MINI_VIEW_HEIGHT, MINI_VIEW_WIDTH, NORMAL_VIEW_HEIGHT, NORMAL_VIEW_WIDTH,
-};
+use constants::{ICON_NORMAL, MINI_VIEW_HEIGHT, MINI_VIEW_WIDTH};
 use events::{process_event, read_new_events};
 use menu::{build_app_menu, build_tray_menu, parse_opacity_menu_id};
 use settings::{get_events_file, get_log_dir, load_settings, save_settings};
@@ -54,47 +52,20 @@ fn toggle_always_on_top(app: &tauri::AppHandle, state: &mut AppState) {
     }
 }
 
-fn toggle_mini_view(app: &tauri::AppHandle, state: &mut AppState) {
-    state.settings.mini_view = !state.settings.mini_view;
-    save_settings(app, &state.settings);
-
-    if let Some(window) = app.get_webview_window("dashboard") {
-        let _ = window.set_decorations(!state.settings.mini_view);
-        if state.settings.mini_view {
-            let _ = window.set_size(tauri::LogicalSize::new(MINI_VIEW_WIDTH, MINI_VIEW_HEIGHT));
-        } else {
-            let _ = window.set_size(tauri::LogicalSize::new(
-                NORMAL_VIEW_WIDTH,
-                NORMAL_VIEW_HEIGHT,
-            ));
-            let _ = window.center();
-        }
-    }
-
-    let _ = app.emit("settings-updated", &state.settings);
-}
-
 fn create_dashboard_window(
     app: &tauri::App,
     always_on_top: bool,
-    mini_view: bool,
 ) -> tauri::Result<tauri::WebviewWindow> {
-    let (width, height) = if mini_view {
-        (MINI_VIEW_WIDTH, MINI_VIEW_HEIGHT)
-    } else {
-        (NORMAL_VIEW_WIDTH, NORMAL_VIEW_HEIGHT)
-    };
-
     let transparent_color = Color(0, 0, 0, 0);
 
     let base_builder = WebviewWindowBuilder::new(app, "dashboard", WebviewUrl::App("index.html".into()))
         .title("Eyes on Claude Code")
-        .inner_size(width, height)
+        .inner_size(MINI_VIEW_WIDTH, MINI_VIEW_HEIGHT)
         .min_inner_size(200.0, 300.0)
         .center()
         .visible(true)
         .always_on_top(always_on_top)
-        .decorations(!mini_view)
+        .decorations(false)
         .transparent(true)
         .background_color(transparent_color);
 
@@ -200,13 +171,12 @@ fn main() {
             clear_all_sessions,
             get_always_on_top,
             set_always_on_top,
-            get_mini_view,
-            set_mini_view,
             get_settings,
             set_opacity_active,
             set_opacity_inactive,
             get_repo_git_info,
             open_diff,
+            set_window_size_for_setup,
             // Setup commands
             get_setup_status,
             install_hook,
@@ -233,18 +203,15 @@ fn main() {
             }
 
             // Get initial settings
-            let (always_on_top, mini_view) = {
+            let always_on_top = {
                 let state_guard = state_for_tray
                     .lock()
                     .map_err(|_| tauri::Error::Anyhow(anyhow::anyhow!("Failed to acquire state lock")))?;
-                (
-                    state_guard.settings.always_on_top,
-                    state_guard.settings.mini_view,
-                )
+                state_guard.settings.always_on_top
             };
 
             // Create dashboard window
-            let dashboard_window = create_dashboard_window(app, always_on_top, mini_view)?;
+            let dashboard_window = create_dashboard_window(app, always_on_top)?;
 
             // Set initial badge count
             if let Ok(state_guard) = state_for_tray.lock() {
@@ -284,12 +251,21 @@ fn main() {
             };
 
             // Set app menu and handle events
+            let app_handle_for_menu = app_handle.clone();
             app.set_menu(app_menu)?;
             app.on_menu_event(move |app, event| {
                 let state = &state_for_app_menu;
                 match event.id.as_ref() {
                     "open_dashboard" => {
                         show_dashboard(app);
+                    }
+                    "open_logs" => {
+                        match get_log_dir(&app_handle_for_menu) {
+                            Ok(log_dir) => {
+                                let _ = opener::open(&log_dir);
+                            }
+                            Err(e) => eprintln!("[eocc] Cannot open logs: {}", e),
+                        }
                     }
                     "always_on_top" => {
                         match state.lock() {
@@ -298,15 +274,6 @@ fn main() {
                                 update_tray_and_badge(app, &state_guard);
                             }
                             Err(e) => eprintln!("[eocc] Failed to acquire lock for always_on_top: {:?}", e),
-                        }
-                    }
-                    "mini_view" => {
-                        match state.lock() {
-                            Ok(mut state_guard) => {
-                                toggle_mini_view(app, &mut state_guard);
-                                update_tray_and_badge(app, &state_guard);
-                            }
-                            Err(e) => eprintln!("[eocc] Failed to acquire lock for mini_view: {:?}", e),
                         }
                     }
                     "sound_enabled" => {

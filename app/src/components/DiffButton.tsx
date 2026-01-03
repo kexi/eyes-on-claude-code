@@ -2,14 +2,17 @@ import { FileIcon } from './icons';
 
 interface DiffButtonProps {
   onClick: () => void;
+  small?: boolean;
 }
 
-export const DiffButton = ({ onClick }: DiffButtonProps) => (
+export const DiffButton = ({ onClick, small }: DiffButtonProps) => (
   <button
     onClick={onClick}
-    className="flex items-center gap-1.5 px-3 py-1 rounded-md border border-text-secondary/30 text-text-secondary text-xs hover:bg-bg-card transition-colors"
+    className={`flex items-center gap-1 rounded-md border border-text-secondary/30 text-text-secondary hover:bg-bg-card transition-colors ${
+      small ? 'px-1.5 py-0.5 text-[0.5rem]' : 'px-3 py-1 text-xs gap-1.5'
+    }`}
   >
-    <FileIcon size={14} />
+    <FileIcon size={small ? 10 : 14} />
     Diff
   </button>
 );

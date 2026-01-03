@@ -54,12 +54,62 @@ fn build_opacity_submenu<R: Runtime>(
         .build()
 }
 
+fn build_help_events_submenu<R: Runtime>(
+    app: &tauri::AppHandle<R>,
+    events: &std::collections::VecDeque<EventInfo>,
+) -> tauri::Result<Submenu<R>> {
+    let mut submenu_builder = SubmenuBuilder::new(app, "Recent Events");
+
+    if events.is_empty() {
+        let empty_item = MenuItemBuilder::with_id("help_events_empty", "No recent events")
+            .enabled(false)
+            .build(app)?;
+        submenu_builder = submenu_builder.item(&empty_item);
+    } else {
+        for (idx, event) in events.iter().rev().take(10).enumerate() {
+            let emoji = match &event.event_type {
+                EventType::Notification => match &event.notification_type {
+                    NotificationType::PermissionPrompt => "🔐",
+                    NotificationType::IdlePrompt => "⏳",
+                    NotificationType::Other => "🔔",
+                },
+                EventType::Stop => "✅",
+                EventType::SessionStart => "🚀",
+                EventType::SessionEnd => "🏁",
+                EventType::PostToolUse => "🔧",
+                EventType::UserPromptSubmit => "💬",
+                EventType::Unknown => "📌",
+            };
+            let event_name = match &event.event_type {
+                EventType::SessionStart => "session_start",
+                EventType::SessionEnd => "session_end",
+                EventType::Notification => "notification",
+                EventType::Stop => "stop",
+                EventType::PostToolUse => "post_tool_use",
+                EventType::UserPromptSubmit => "user_prompt_submit",
+                EventType::Unknown => "unknown",
+            };
+            // Format timestamp for display (extract time portion)
+            let time_str = event.timestamp.split('T').nth(1)
+                .map(|t| t.split('.').next().unwrap_or(t))
+                .unwrap_or(&event.timestamp);
+            let title = format!("{} {} {} ({})", emoji, event.project_name, event_name, time_str);
+            let item = MenuItemBuilder::with_id(format!("help_event_{}", idx), &title)
+                .enabled(false)
+                .build(app)?;
+            submenu_builder = submenu_builder.item(&item);
+        }
+    }
+
+    submenu_builder.build()
+}
+
 /// Build the application menu bar
 ///
 /// Structure:
 /// - Eyes on Claude Code: About, Quit
-/// - View: Mini View
 /// - Window: Open Dashboard, Always on Top, Opacity, Sound
+/// - Help: Open Log Directory, Recent Events
 pub fn build_app_menu<R: Runtime>(
     app: &tauri::AppHandle<R>,
     state: &AppState,
@@ -73,16 +123,6 @@ pub fn build_app_menu<R: Runtime>(
         }))
         .separator()
         .quit()
-        .build()?;
-
-    // View menu
-    let mini_view = CheckMenuItemBuilder::with_id("mini_view", "Mini View")
-        .checked(state.settings.mini_view)
-        .accelerator("CmdOrCtrl+M")
-        .build(app)?;
-
-    let view_menu = SubmenuBuilder::new(app, "View")
-        .item(&mini_view)
         .build()?;
 
     // Window menu
@@ -109,11 +149,21 @@ pub fn build_app_menu<R: Runtime>(
         .item(&sound_enabled)
         .build()?;
 
+    // Help menu
+    let open_logs = MenuItemBuilder::with_id("open_logs", "Open Log Directory").build(app)?;
+    let events_submenu = build_help_events_submenu(app, &state.recent_events)?;
+
+    let help_menu = SubmenuBuilder::new(app, "Help")
+        .item(&open_logs)
+        .separator()
+        .item(&events_submenu)
+        .build()?;
+
     // Build the menu bar
     let menu = MenuBuilder::new(app)
         .item(&app_menu)
-        .item(&view_menu)
         .item(&window_menu)
+        .item(&help_menu)
         .build()?;
 
     Ok(menu)
