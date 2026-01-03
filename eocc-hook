@@ -8,8 +8,8 @@
 
 set -euo pipefail
 
-# ログディレクトリ
-LOG_DIR="${HOME}/.eocc/logs"
+# ログディレクトリ (macOS標準パス - Tauriのapp_log_dir()と一致)
+LOG_DIR="${HOME}/Library/Logs/com.local.eyes-on-claude-code"
 LOG_FILE="${LOG_DIR}/events.jsonl"
 LATEST_FILE="${LOG_DIR}/latest.json"
 

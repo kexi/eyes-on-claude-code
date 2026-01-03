@@ -48,6 +48,12 @@ pub struct SetupStatus {
     pub merged_settings: String,
 }
 
+/// Get the symlink path for the hook script (avoids spaces in path)
+pub fn get_hook_symlink_path() -> Result<PathBuf, String> {
+    let home = dirs::home_dir().ok_or("Failed to get home directory")?;
+    Ok(home.join(".local").join("bin").join("eocc-hook"))
+}
+
 /// Get the path to the hook script in the app data directory
 pub fn get_hook_script_path(app: &tauri::AppHandle) -> Result<PathBuf, String> {
     let app_data_dir = app
@@ -62,7 +68,7 @@ pub fn get_claude_settings_path() -> Option<PathBuf> {
     dirs::home_dir().map(|home| home.join(".claude").join("settings.json"))
 }
 
-/// Install the hook script to the app data directory
+/// Install the hook script to the app data directory and create symlink
 pub fn install_hook_script(app: &tauri::AppHandle) -> Result<PathBuf, String> {
     let app_data_dir = app
         .path()
@@ -89,6 +95,20 @@ pub fn install_hook_script(app: &tauri::AppHandle) -> Result<PathBuf, String> {
         perms.set_mode(0o755);
         fs::set_permissions(&hook_path, perms)
             .map_err(|e| format!("Failed to set hook permissions: {:?}", e))?;
+    }
+
+    // Create symlink at ~/.local/bin/eocc-hook (avoids spaces in path)
+    #[cfg(unix)]
+    {
+        let symlink_path = get_hook_symlink_path()?;
+        if let Some(parent) = symlink_path.parent() {
+            fs::create_dir_all(parent)
+                .map_err(|e| format!("Failed to create symlink directory: {:?}", e))?;
+        }
+        // Remove existing symlink if present
+        let _ = fs::remove_file(&symlink_path);
+        std::os::unix::fs::symlink(&hook_path, &symlink_path)
+            .map_err(|e| format!("Failed to create symlink: {:?}", e))?;
     }
 
     Ok(hook_path)
@@ -127,9 +147,14 @@ pub fn check_claude_settings(hook_script_path: &str) -> bool {
         None => return false,
     };
 
-    // Check for at least one hook that contains our script path
+    // Check for hook path in various forms:
+    // - Full path: /Users/.../eocc-hook
+    // - Tilde path: ~/.local/bin/eocc-hook
+    // - Just the script name: eocc-hook
     let hooks_str = hooks.to_string();
-    hooks_str.contains(hook_script_path) || hooks_str.contains("eocc-hook")
+    hooks_str.contains(hook_script_path)
+        || hooks_str.contains("~/.local/bin/eocc-hook")
+        || hooks_str.contains("eocc-hook")
 }
 
 /// Strip JSONC comments (// and /* */) from content
@@ -271,31 +296,28 @@ pub fn generate_merged_settings(hook_script_path: &str) -> Result<String, String
 
 /// Get the full setup status
 pub fn get_setup_status(app: &tauri::AppHandle) -> SetupStatus {
-    let hook_path = get_hook_script_path(app)
-        .map(|p| p.to_string_lossy().to_string())
-        .unwrap_or_default();
+    // Use tilde path for settings (portable and no spaces)
+    let tilde_path = "~/.local/bin/eocc-hook".to_string();
 
     let hook_installed = is_hook_installed(app);
-    let claude_settings_configured = check_claude_settings(&hook_path);
+    let claude_settings_configured = check_claude_settings(&tilde_path);
 
-    let merged_settings = generate_merged_settings(&hook_path).unwrap_or_else(|e| {
+    let merged_settings = generate_merged_settings(&tilde_path).unwrap_or_else(|e| {
         format!("{{\"error\": \"{}\"}}", e)
     });
 
     SetupStatus {
         hook_installed,
-        hook_path,
+        hook_path: tilde_path,
         claude_settings_configured,
         merged_settings,
     }
 }
 
-/// Initialize setup: install hook script if needed, create log directory
+/// Initialize setup: install hook script, create log directory
 pub fn initialize_setup(app: &tauri::AppHandle) -> Result<(), String> {
-    // Install hook script if not present
-    if !is_hook_installed(app) {
-        install_hook_script(app)?;
-    }
+    // Always install/update hook script to ensure latest version
+    install_hook_script(app)?;
 
     // Create log directory
     let log_dir = get_log_dir(app)?;
