@@ -112,14 +112,12 @@ Diffをクリックすると [difit](https://github.com/yoshiko-pg/difit) を起
 ### セットアップ
 
 ```bash
-cd app
 pnpm install
 ```
 
 ### 開発起動
 
 ```bash
-cd app
 pnpm tauri dev
 ```
 
@@ -192,14 +190,13 @@ sequenceDiagram
 ### ビルド
 
 ```bash
-cd app
 pnpm tauri build
 ```
 
 成果物（macOS例）:
 
-- `app/src-tauri/target/release/bundle/macos/Eyes on Claude Code.app`
-- `app/src-tauri/target/release/bundle/dmg/Eyes on Claude Code_1.0.0_aarch64.dmg`
+- `src-tauri/target/release/bundle/macos/Eyes on Claude Code.app`
+- `src-tauri/target/release/bundle/dmg/Eyes on Claude Code_1.0.0_aarch64.dmg`
 
 ## 5. troubleshooting
 

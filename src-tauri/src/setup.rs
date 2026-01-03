@@ -59,8 +59,8 @@ pub fn get_init_error() -> Option<String> {
     guard.clone()
 }
 
-/// Embedded hook script content
-const HOOK_SCRIPT: &str = include_str!("../../../eocc-hook");
+/// Embedded hook script content (relative to src-tauri/src)
+const HOOK_SCRIPT: &str = include_str!("../../eocc-hook");
 
 /// Generate hooks config with the correct hook script path
 fn generate_hooks_config(hook_script_path: &str) -> serde_json::Value {

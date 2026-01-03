@@ -4,9 +4,9 @@ local_*
 .DS_Store
 
 # Tauri build artifacts
-app/src-tauri/target/
-app/node_modules/
-app/dist/
+src-tauri/target/
+node_modules/
+dist/
 
 # IDE
 .idea/

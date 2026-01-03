@@ -110,14 +110,12 @@ Click Diff to launch [difit](https://github.com/yoshiko-pg/difit) and review the
 ### Setup
 
 ```bash
-cd app
 pnpm install
 ```
 
 ### Run in development
 
 ```bash
-cd app
 pnpm tauri dev
 ```
 
@@ -190,14 +188,13 @@ sequenceDiagram
 ### Build
 
 ```bash
-cd app
 pnpm tauri build
 ```
 
 Artifacts (macOS example):
 
-- `app/src-tauri/target/release/bundle/macos/Eyes on Claude Code.app`
-- `app/src-tauri/target/release/bundle/dmg/Eyes on Claude Code_1.0.0_aarch64.dmg`
+- `src-tauri/target/release/bundle/macos/Eyes on Claude Code.app`
+- `src-tauri/target/release/bundle/dmg/Eyes on Claude Code_1.0.0_aarch64.dmg`
 
 ## 5. Troubleshooting
 
