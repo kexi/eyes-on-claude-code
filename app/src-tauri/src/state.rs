@@ -145,8 +145,20 @@ impl AppState {
     }
 
     pub fn to_dashboard_data(&self) -> DashboardData {
+        // Sort sessions by last_event timestamp in descending order (newest first)
+        // Empty timestamps are sorted to the end
+        let mut sessions: Vec<SessionInfo> = self.sessions.values().cloned().collect();
+        sessions.sort_by(|a, b| {
+            match (a.last_event.is_empty(), b.last_event.is_empty()) {
+                (true, true) => std::cmp::Ordering::Equal,
+                (true, false) => std::cmp::Ordering::Greater, // Empty goes to end
+                (false, true) => std::cmp::Ordering::Less,    // Non-empty comes first
+                (false, false) => b.last_event.cmp(&a.last_event), // Descending order
+            }
+        });
+
         DashboardData {
-            sessions: self.sessions.values().cloned().collect(),
+            sessions,
             events: self.recent_events.iter().cloned().collect(),
         }
     }

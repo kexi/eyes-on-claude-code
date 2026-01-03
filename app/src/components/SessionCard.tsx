@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import type { SessionInfo, GitInfo } from '@/types';
-import { getStatusEmoji, getStatusClass } from '@/lib/utils';
+import { getStatusEmoji, getStatusClass, formatRelativeTime } from '@/lib/utils';
 import { removeSession, getRepoGitInfo, openDiff, type DiffType } from '@/lib/tauri';
 import { ChevronDownIcon } from './icons';
 import { DiffButton } from './DiffButton';
@@ -14,8 +14,20 @@ export const SessionCard = ({ session }: SessionCardProps) => {
   const [gitInfo, setGitInfo] = useState<GitInfo | null>(null);
   const [isLoadingGit, setIsLoadingGit] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [relativeTime, setRelativeTime] = useState(() => formatRelativeTime(session.last_event));
 
   const statusClass = getStatusClass(session.status);
+
+  // Update relative time display periodically (every 60 seconds)
+  useEffect(() => {
+    setRelativeTime(formatRelativeTime(session.last_event));
+
+    const interval = setInterval(() => {
+      setRelativeTime(formatRelativeTime(session.last_event));
+    }, 60000);
+
+    return () => clearInterval(interval);
+  }, [session.last_event]);
 
   // Auto-dismiss error after 5 seconds
   useEffect(() => {
@@ -94,6 +106,9 @@ export const SessionCard = ({ session }: SessionCardProps) => {
           <div className="font-mono text-text-secondary truncate text-[0.5rem]">
             {session.project_dir}
           </div>
+          {relativeTime && (
+            <div className="text-text-secondary text-[0.5rem]">{relativeTime}</div>
+          )}
           {session.waiting_for && (
             <div className="text-warning bg-warning/10 rounded inline-block mt-1 truncate max-w-full text-[0.5rem] py-0.5 px-1">
               ⏸ {session.waiting_for}
