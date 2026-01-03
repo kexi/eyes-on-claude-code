@@ -2,7 +2,7 @@
 
 Claude Code の **グローバルHooks** からイベントを収集し、複数プロジェクトのセッション状態を **メニューバー（トレイ）** と **ダッシュボード** で一覧できる Tauri アプリです。
 
-[screenshot_ダッシュボードの全体（Sessions一覧と右上ステータス）]
+![dashboard](https://github.com/user-attachments/assets/1b14b0df-2b63-433c-8654-8a84b4110546)
 
 ---
 
@@ -79,6 +79,13 @@ Diffをクリックすると [difit](https://github.com/yoshiko-pg/difit) を起
   - Waiting（Permission/Input）: 注意音
   - Completed: 完了音
 
+#### 透過設定
+
+- ダッシュボードは **アクティブ/非アクティブ** で透過率（Opacity）を切り替えます。
+  - **Active**: ダッシュボードにフォーカスがあるとき（初期値: 100%）
+  - **Inactive**: フォーカスが無いとき（初期値: 30%）
+- 透過率はメニューバーの **Window → Opacity** から変更できます。
+
 ---
 
 ## 3. サポート機能一覧
@@ -132,7 +139,7 @@ pnpm tauri dev
 
 ```
 ~/Library/Application Support/com.local.eyes-on-claude-code/  # macOS
-  ├── settings.json          # アプリ設定（Always on Top / opacity / sound）
+  ├── settings.json          # アプリ設定
   └── runtime_state.json     # セッション状態（アプリ再起動時に復元）
 
 ~/Library/Logs/com.local.eyes-on-claude-code/  # macOS
