@@ -350,7 +350,7 @@ pub fn initialize_setup(app: &tauri::AppHandle) -> Result<(), String> {
     // Always install/update hook script to ensure latest version
     install_hook_script(app)?;
 
-    // Create log directory
+    // Create log directory (~/.eocc/logs)
     let log_dir = get_log_dir(app)?;
     fs::create_dir_all(&log_dir)
         .map_err(|e| format!("Failed to create log directory: {:?}", e))?;
