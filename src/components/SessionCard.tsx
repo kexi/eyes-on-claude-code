@@ -1,9 +1,11 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import type { SessionInfo, GitInfo } from '@/types';
 import { getStatusEmoji, getStatusClass, formatRelativeTime } from '@/lib/utils';
 import { removeSession, getRepoGitInfo, openDiff, type DiffType } from '@/lib/tauri';
-import { ChevronDownIcon } from './icons';
+import { ChevronDownIcon, RefreshIcon } from './icons';
 import { DiffButton } from './DiffButton';
+
+const FOCUS_REFRESH_MIN_INTERVAL = 5000;
 
 interface SessionCardProps {
   session: SessionInfo;
@@ -15,6 +17,8 @@ export const SessionCard = ({ session }: SessionCardProps) => {
   const [isLoadingGit, setIsLoadingGit] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [relativeTime, setRelativeTime] = useState(() => formatRelativeTime(session.last_event));
+  const isLoadingGitRef = useRef(false);
+  const lastFocusFetchTimeRef = useRef(0);
 
   const statusClass = getStatusClass(session.status);
 
@@ -49,6 +53,24 @@ export const SessionCard = ({ session }: SessionCardProps) => {
     setIsExpanded(!isExpanded);
   };
 
+  const fetchGitInfo = useCallback(async () => {
+    if (isLoadingGitRef.current) return;
+    isLoadingGitRef.current = true;
+    setIsLoadingGit(true);
+    setError(null);
+    try {
+      const info = await getRepoGitInfo(session.project_dir);
+      setGitInfo(info);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      setError(`Failed to load git info: ${message}`);
+      console.error('Failed to load git info:', err);
+    } finally {
+      isLoadingGitRef.current = false;
+      setIsLoadingGit(false);
+    }
+  }, [session.project_dir]);
+
   // Reset git info when session event changes (e.g., after commit)
   useEffect(() => {
     setGitInfo(null);
@@ -57,18 +79,25 @@ export const SessionCard = ({ session }: SessionCardProps) => {
   // Load git info when expanded
   useEffect(() => {
     if (isExpanded && !gitInfo && !isLoadingGit) {
-      setIsLoadingGit(true);
-      setError(null);
-      getRepoGitInfo(session.project_dir)
-        .then(setGitInfo)
-        .catch((err) => {
-          const message = err instanceof Error ? err.message : String(err);
-          setError(`Failed to load git info: ${message}`);
-          console.error('Failed to load git info:', err);
-        })
-        .finally(() => setIsLoadingGit(false));
+      fetchGitInfo();
     }
-  }, [isExpanded, gitInfo, isLoadingGit, session.project_dir]);
+  }, [isExpanded, gitInfo, isLoadingGit, fetchGitInfo]);
+
+  // Refresh git info when window gains focus (only if expanded, with min interval)
+  useEffect(() => {
+    if (!isExpanded) return;
+
+    const handleFocus = () => {
+      const now = Date.now();
+      if (now - lastFocusFetchTimeRef.current > FOCUS_REFRESH_MIN_INTERVAL) {
+        lastFocusFetchTimeRef.current = now;
+        fetchGitInfo();
+      }
+    };
+
+    window.addEventListener('focus', handleFocus);
+    return () => window.removeEventListener('focus', handleFocus);
+  }, [isExpanded, fetchGitInfo]);
 
   const handleDiffClick = async (type: DiffType) => {
     try {
@@ -192,6 +221,18 @@ export const SessionCard = ({ session }: SessionCardProps) => {
                   <span className="text-success text-[0.625rem] truncate">{gitInfo.branch}</span>
                 </div>
                 <DiffButton onClick={() => handleDiffClick('branch')} small />
+              </div>
+
+              {/* Refresh button */}
+              <div className="pt-1">
+                <button
+                  onClick={fetchGitInfo}
+                  disabled={isLoadingGit}
+                  className="flex items-center gap-1 text-[0.625rem] text-text-secondary hover:text-white transition-colors disabled:opacity-50"
+                >
+                  <RefreshIcon className={`w-3 h-3 ${isLoadingGit ? 'animate-spin' : ''}`} />
+                  Refresh
+                </button>
               </div>
             </>
           ) : (
