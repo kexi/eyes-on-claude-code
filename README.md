@@ -202,6 +202,52 @@ Artifacts (macOS example):
 - `src-tauri/target/release/bundle/macos/Eyes on Claude Code.app`
 - `src-tauri/target/release/bundle/dmg/Eyes on Claude Code_1.0.0_aarch64.dmg`
 
+### Release
+
+Releases are automated via GitHub Actions. To create a new release:
+
+1. Update version in `src-tauri/tauri.conf.json` and `package.json`
+2. Commit the version bump
+3. Create and push a version tag:
+   ```bash
+   git tag v1.0.1
+   git push origin v1.0.1
+   ```
+4. GitHub Actions will automatically build for all platforms and create a draft release
+5. Review the release notes on GitHub and publish
+
+#### Supported platforms
+
+| Platform | Architecture | Artifact |
+|----------|--------------|----------|
+| macOS | Apple Silicon (aarch64) | `.dmg`, `.app` |
+| macOS | Intel (x86_64) | `.dmg`, `.app` |
+| Linux | x64 | `.deb`, `.AppImage` |
+| Windows | x64 | `.msi`, `.exe` |
+
+#### Manual local build
+
+For local builds targeting a specific platform:
+
+```bash
+# macOS (current architecture)
+pnpm tauri build
+
+# Cross-compile (requires appropriate toolchain)
+pnpm tauri build --target aarch64-apple-darwin
+pnpm tauri build --target x86_64-apple-darwin
+```
+
+#### Icon generation
+
+To regenerate icons from the source PNG:
+
+```bash
+./scripts/generate-icons.sh
+# or
+pnpm tauri icon src-tauri/icons/icon.png
+```
+
 ## 5. Troubleshooting
 
 ### Setup modal won’t disappear (hooks remain invalid)

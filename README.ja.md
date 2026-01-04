@@ -204,6 +204,52 @@ pnpm tauri build
 - `src-tauri/target/release/bundle/macos/Eyes on Claude Code.app`
 - `src-tauri/target/release/bundle/dmg/Eyes on Claude Code_1.0.0_aarch64.dmg`
 
+### リリース
+
+リリースはGitHub Actionsで自動化されています。新しいリリースを作成するには:
+
+1. `src-tauri/tauri.conf.json` と `package.json` のバージョンを更新
+2. バージョン更新をコミット
+3. バージョンタグを作成してプッシュ:
+   ```bash
+   git tag v1.0.1
+   git push origin v1.0.1
+   ```
+4. GitHub Actionsが自動的にすべてのプラットフォーム向けにビルドし、ドラフトリリースを作成
+5. GitHubでリリースノートを確認し、公開
+
+#### 対応プラットフォーム
+
+| プラットフォーム | アーキテクチャ | 成果物 |
+|----------|--------------|----------|
+| macOS | Apple Silicon (aarch64) | `.dmg`, `.app` |
+| macOS | Intel (x86_64) | `.dmg`, `.app` |
+| Linux | x64 | `.deb`, `.AppImage` |
+| Windows | x64 | `.msi`, `.exe` |
+
+#### 手動ローカルビルド
+
+特定のプラットフォーム向けにローカルでビルドする場合:
+
+```bash
+# macOS（現在のアーキテクチャ）
+pnpm tauri build
+
+# クロスコンパイル（適切なツールチェーンが必要）
+pnpm tauri build --target aarch64-apple-darwin
+pnpm tauri build --target x86_64-apple-darwin
+```
+
+#### アイコン生成
+
+ソースPNGからアイコンを再生成する場合:
+
+```bash
+./scripts/generate-icons.sh
+# または
+pnpm tauri icon src-tauri/icons/icon.png
+```
+
 ## 5. troubleshooting
 
 ### Setupモーダルが消えない（hooksがNGのまま）
