@@ -135,10 +135,11 @@ pub fn build_app_menu<R: Runtime>(
     state: &AppState,
 ) -> tauri::Result<Menu<R>> {
     // Eyes on Claude Code menu (app menu)
+    let version = app.config().version.clone();
     let app_menu = SubmenuBuilder::new(app, "Eyes on Claude Code")
         .about(Some(AboutMetadata {
             name: Some("Eyes on Claude Code".to_string()),
-            version: Some("1.0.0".to_string()),
+            version,
             ..Default::default()
         }))
         .separator()
