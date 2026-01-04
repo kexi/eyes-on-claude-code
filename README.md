@@ -17,6 +17,12 @@ An app that collects events from Claude Code **global Hooks** and lets you monit
 - Claude Code
 - Node.js v23+
 
+### Supported platforms
+
+- [x] macOS (12+)
+- [ ] Linux (untested; may work)
+- [ ] Windows (untested; pls someone helps us 🙇🏻‍♂️)
+
 ### First launch
 
 On the first launch, the app shows instructions for installing the hooks configuration.
@@ -138,11 +144,11 @@ pnpm tauri dev
 **App data**
 
 ```
-~/Library/Application Support/me.joe-re.eocc/  # macOS
+~/Library/Application Support/tech.joe-re.eocc/  # macOS
   ├── settings.json          # App settings
   └── runtime_state.json     # Session state (restored on app restart)
 
-~/Library/Logs/me.joe-re.eocc/  # macOS
+~/Library/Logs/tech.joe-re.eocc/  # macOS
   └── *.log                  # App logs
 ```
 
@@ -210,8 +216,8 @@ Artifacts (macOS example):
 ### Logs don’t increase / sessions don’t show up
 
 - Check the app logs
-  - `ls -la ~/Library/Logs/me.joe-re.eocc/`
-  - `cat ~/Library/Logs/me.joe-re.eocc/*.log | grep -i error`
+  - `ls -la ~/Library/Logs/tech.joe-re.eocc/`
+  - `cat ~/Library/Logs/tech.joe-re.eocc/*.log | grep -i error`
 - Check whether `events.jsonl` is created/updated
   - `ls -la ~/.eocc/logs/`
 - Check whether the hook is being called (run `/hooks` in Claude Code)

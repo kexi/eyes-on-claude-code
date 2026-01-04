@@ -17,6 +17,12 @@ Claude Code の **グローバルHooks** からイベントを収集し、複数
 - Claude Code
 - Node.js v23+
 
+### 対応プラットフォーム
+
+- [x] macOS（12+）
+- [ ] Linux（動作未検証）
+- [ ] Windows（動作未検証。windowsユーザの方のコントリビューションをお待ちしています🙇🏻‍♂️）
+
 ### 初回起動
 
 初回起動時にはアプリケーション上にhooksの設定のインストラクションが表示されます。
@@ -140,11 +146,11 @@ pnpm tauri dev
 **アプリデータ**
 
 ```
-~/Library/Application Support/me.joe-re.eocc/  # macOS
+~/Library/Application Support/tech.joe-re.eocc/  # macOS
   ├── settings.json          # アプリ設定
   └── runtime_state.json     # セッション状態（アプリ再起動時に復元）
 
-~/Library/Logs/me.joe-re.eocc/  # macOS
+~/Library/Logs/tech.joe-re.eocc/  # macOS
   └── *.log                  # アプリログ
 ```
 
@@ -212,8 +218,8 @@ pnpm tauri build
 ### ログが増えない / セッションが表示されない
 
 - アプリログを確認
-  - `ls -la ~/Library/Logs/me.joe-re.eocc/`
-  - `cat ~/Library/Logs/me.joe-re.eocc/*.log | grep -i error`
+  - `ls -la ~/Library/Logs/tech.joe-re.eocc/`
+  - `cat ~/Library/Logs/tech.joe-re.eocc/*.log | grep -i error`
 - `events.jsonl` が作成/更新されているか確認
   - `ls -la ~/.eocc/logs/`
 - Hookが呼ばれているか確認（Claude Codeで `/hooks` を実行）
