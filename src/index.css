@@ -27,7 +27,7 @@ body {
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
   min-height: 100vh;
   overflow: hidden;
-  color: #eaeaea;
+  color: var(--color-text-primary);
 }
 
 body.mini-view {
