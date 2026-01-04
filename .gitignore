@@ -8,6 +8,9 @@ src-tauri/target/
 node_modules/
 dist/
 
+# TypeScript build cache
+*.tsbuildinfo
+
 # Generated reports
 license-report.json
 

@@ -47,7 +47,9 @@ pub fn load_settings(app: &tauri::AppHandle) -> Settings {
         match fs::read_to_string(&settings_file) {
             Ok(content) => match serde_json::from_str(&content) {
                 Ok(settings) => return settings,
-                Err(e) => log::error!(target: "eocc.settings", "Failed to parse settings file: {:?}", e),
+                Err(e) => {
+                    log::error!(target: "eocc.settings", "Failed to parse settings file: {:?}", e)
+                }
             },
             Err(e) => log::error!(target: "eocc.settings", "Failed to read settings file: {:?}", e),
         }

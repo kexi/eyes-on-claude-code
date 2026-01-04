@@ -1,8 +1,8 @@
 use std::collections::HashMap;
 use std::io::{BufRead, BufReader, Write};
 use std::process::{Child, Command, Stdio};
-use std::sync::Mutex;
 use std::sync::mpsc;
+use std::sync::Mutex;
 use std::time::Duration;
 
 /// Default base branch for branch diff comparison
@@ -26,7 +26,7 @@ pub enum DiffType {
 
 impl DiffType {
     /// Get the git diff arguments for this diff type
-    fn to_git_diff_args(&self, branch: Option<&str>) -> Result<Vec<String>, String> {
+    fn git_diff_args(self, branch: Option<&str>) -> Result<Vec<String>, String> {
         match self {
             DiffType::Unstaged => Ok(vec!["diff".to_string()]),
             DiffType::Staged => Ok(vec!["diff".to_string(), "--cached".to_string()]),
@@ -41,7 +41,11 @@ impl DiffType {
                 if base.starts_with('-') {
                     return Err(format!("Invalid branch name: {}", base));
                 }
-                Ok(vec!["diff".to_string(), base.to_string(), "HEAD".to_string()])
+                Ok(vec![
+                    "diff".to_string(),
+                    base.to_string(),
+                    "HEAD".to_string(),
+                ])
             }
         }
     }
@@ -121,13 +125,11 @@ fn get_untracked_diff(repo_path: &str) -> Vec<u8> {
         .output();
 
     let untracked_files = match untracked_output {
-        Ok(output) if output.status.success() => {
-            String::from_utf8_lossy(&output.stdout)
-                .lines()
-                .filter(|s| !s.is_empty())
-                .map(|s| s.to_string())
-                .collect::<Vec<_>>()
-        }
+        Ok(output) if output.status.success() => String::from_utf8_lossy(&output.stdout)
+            .lines()
+            .filter(|s| !s.is_empty())
+            .map(|s| s.to_string())
+            .collect::<Vec<_>>(),
         _ => return Vec::new(),
     };
 
@@ -162,7 +164,7 @@ pub fn start_difit_server(
     base_branch: Option<&str>,
     port: u16,
 ) -> Result<DifitServerInfo, String> {
-    let git_args = diff_type.to_git_diff_args(base_branch)?;
+    let git_args = diff_type.git_diff_args(base_branch)?;
 
     // Run git diff and capture output
     let git_output = Command::new("git")
@@ -220,18 +222,16 @@ pub fn start_difit_server(
     let expected_port = port;
     std::thread::spawn(move || {
         let reader = BufReader::new(stderr);
-        for line in reader.lines().take(10) {
-            if let Ok(line) = line {
-                // Look for "difit server started on http://localhost:XXXX"
-                if line.contains("difit server started on") {
-                    if let Some(url_start) = line.find("http://") {
-                        let url = &line[url_start..];
-                        // Extract port from URL
-                        if let Some(port_str) = url.strip_prefix("http://localhost:") {
-                            if let Ok(p) = port_str.trim().parse::<u16>() {
-                                let _ = tx.send(p);
-                                return;
-                            }
+        for line in reader.lines().take(10).flatten() {
+            // Look for "difit server started on http://localhost:XXXX"
+            if line.contains("difit server started on") {
+                if let Some(url_start) = line.find("http://") {
+                    let url = &line[url_start..];
+                    // Extract port from URL
+                    if let Some(port_str) = url.strip_prefix("http://localhost:") {
+                        if let Ok(p) = port_str.trim().parse::<u16>() {
+                            let _ = tx.send(p);
+                            return;
                         }
                     }
                 }

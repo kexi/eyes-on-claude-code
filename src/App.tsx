@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
-import { AppProvider, useAppContext } from '@/context/AppContext';
+import { AppProvider } from '@/context/AppContext';
+import { useAppContext } from '@/context/useAppContext';
 import { useWindowOpacity } from '@/hooks/useWindowOpacity';
 import { useWindowDrag } from '@/hooks/useWindowDrag';
 import { Header } from '@/components/Header';

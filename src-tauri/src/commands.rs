@@ -76,7 +76,10 @@ pub fn set_window_size_for_setup(enlarged: bool, app: tauri::AppHandle) -> Resul
     if let Some(window) = app.get_webview_window("dashboard") {
         if enlarged {
             let _ = window.set_decorations(true);
-            let _ = window.set_size(tauri::LogicalSize::new(SETUP_MODAL_WIDTH, SETUP_MODAL_HEIGHT));
+            let _ = window.set_size(tauri::LogicalSize::new(
+                SETUP_MODAL_WIDTH,
+                SETUP_MODAL_HEIGHT,
+            ));
             let _ = window.center();
         } else {
             let _ = window.set_decorations(false);
@@ -226,7 +229,11 @@ pub fn open_diff(
     let window = WebviewWindowBuilder::new(
         &app,
         &window_label,
-        WebviewUrl::External(loading_url.parse().map_err(|e| format!("Invalid URL: {}", e))?),
+        WebviewUrl::External(
+            loading_url
+                .parse()
+                .map_err(|e| format!("Invalid URL: {}", e))?,
+        ),
     )
     .title(format!("Diff - {} (Loading...)", diff_type))
     .inner_size(1200.0, 800.0)
@@ -285,7 +292,8 @@ pub fn open_diff(
                     );
                     if let Ok(url) = error_html.parse() {
                         let _ = window.navigate(url);
-                        let _ = window.set_title(&format!("Diff - {} (Error)", diff_type_for_title));
+                        let _ =
+                            window.set_title(&format!("Diff - {} (Error)", diff_type_for_title));
                     }
                 }
             }

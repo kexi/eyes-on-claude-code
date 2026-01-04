@@ -1,38 +1,8 @@
-import {
-  createContext,
-  useContext,
-  useState,
-  useEffect,
-  useCallback,
-  useRef,
-  type ReactNode,
-} from 'react';
+import { useState, useEffect, useCallback, useRef, type ReactNode } from 'react';
 import type { DashboardData, Settings, SessionInfo } from '@/types';
 import { getDashboardData, getSettings, onStateUpdated, onSettingsUpdated } from '@/lib/tauri';
 import { playCompletionSound, playWaitingSound } from '@/lib/audio';
-
-interface AppContextValue {
-  dashboardData: DashboardData;
-  settings: Settings;
-  isLoading: boolean;
-  refreshData: () => Promise<void>;
-}
-
-const defaultDashboardData: DashboardData = { sessions: [], events: [] };
-const defaultSettings: Settings = {
-  always_on_top: true,
-  opacity_active: 1.0,
-  opacity_inactive: 0.3,
-  sound_enabled: true,
-};
-
-const AppContext = createContext<AppContextValue | null>(null);
-
-export const useAppContext = (): AppContextValue => {
-  const context = useContext(AppContext);
-  if (!context) throw new Error('useAppContext must be used within AppProvider');
-  return context;
-};
+import { AppContext, defaultDashboardData, defaultSettings } from './appContextStore';
 
 export const AppProvider = ({ children }: { children: ReactNode }) => {
   const [dashboardData, setDashboardData] = useState<DashboardData>(defaultDashboardData);

@@ -61,16 +61,17 @@ fn create_dashboard_window(
 ) -> tauri::Result<tauri::WebviewWindow> {
     let transparent_color = Color(0, 0, 0, 0);
 
-    let base_builder = WebviewWindowBuilder::new(app, "dashboard", WebviewUrl::App("index.html".into()))
-        .title("Eyes on Claude Code")
-        .inner_size(MINI_VIEW_WIDTH, MINI_VIEW_HEIGHT)
-        .min_inner_size(200.0, 300.0)
-        .center()
-        .visible(true)
-        .always_on_top(always_on_top)
-        .decorations(false)
-        .transparent(true)
-        .background_color(transparent_color);
+    let base_builder =
+        WebviewWindowBuilder::new(app, "dashboard", WebviewUrl::App("index.html".into()))
+            .title("Eyes on Claude Code")
+            .inner_size(MINI_VIEW_WIDTH, MINI_VIEW_HEIGHT)
+            .min_inner_size(200.0, 300.0)
+            .center()
+            .visible(true)
+            .always_on_top(always_on_top)
+            .decorations(false)
+            .transparent(true)
+            .background_color(transparent_color);
 
     match Image::from_bytes(ICON_NORMAL) {
         Ok(icon) => base_builder.icon(icon)?.build(),
@@ -180,9 +181,9 @@ fn main() {
 
             // Load settings and existing events
             {
-                let mut state_guard = state_for_tray
-                    .lock()
-                    .map_err(|_| tauri::Error::Anyhow(anyhow::anyhow!("Failed to acquire state lock")))?;
+                let mut state_guard = state_for_tray.lock().map_err(|_| {
+                    tauri::Error::Anyhow(anyhow::anyhow!("Failed to acquire state lock"))
+                })?;
                 state_guard.settings = load_settings(&app_handle);
                 // Restore previous in-memory state snapshot (sessions/recent events)
                 if let Some(restored) = load_runtime_state(&app_handle) {
@@ -198,9 +199,9 @@ fn main() {
 
             // Get initial settings
             let always_on_top = {
-                let state_guard = state_for_tray
-                    .lock()
-                    .map_err(|_| tauri::Error::Anyhow(anyhow::anyhow!("Failed to acquire state lock")))?;
+                let state_guard = state_for_tray.lock().map_err(|_| {
+                    tauri::Error::Anyhow(anyhow::anyhow!("Failed to acquire state lock"))
+                })?;
                 state_guard.settings.always_on_top
             };
 
@@ -238,9 +239,9 @@ fn main() {
             // Build app menu bar
             let state_for_app_menu = Arc::clone(&state_clone);
             let app_menu = {
-                let state_guard = state_for_tray
-                    .lock()
-                    .map_err(|_| tauri::Error::Anyhow(anyhow::anyhow!("Failed to acquire state lock")))?;
+                let state_guard = state_for_tray.lock().map_err(|_| {
+                    tauri::Error::Anyhow(anyhow::anyhow!("Failed to acquire state lock"))
+                })?;
                 build_app_menu(&app_handle, &state_guard)?
             };
 
@@ -253,34 +254,33 @@ fn main() {
                     "open_dashboard" => {
                         show_dashboard(app);
                     }
-                    "open_logs" => {
-                        match get_app_log_dir(&app_handle_for_menu) {
-                            Ok(log_dir) => {
-                                let _ = opener::open(&log_dir);
-                            }
-                            Err(e) => eprintln!("[eocc] Cannot open logs: {}", e),
+                    "open_logs" => match get_app_log_dir(&app_handle_for_menu) {
+                        Ok(log_dir) => {
+                            let _ = opener::open(&log_dir);
                         }
-                    }
-                    "always_on_top" => {
-                        match state.lock() {
-                            Ok(mut state_guard) => {
-                                toggle_always_on_top(app, &mut state_guard);
-                                update_tray_and_badge(app, &state_guard);
-                            }
-                            Err(e) => eprintln!("[eocc] Failed to acquire lock for always_on_top: {:?}", e),
+                        Err(e) => eprintln!("[eocc] Cannot open logs: {}", e),
+                    },
+                    "always_on_top" => match state.lock() {
+                        Ok(mut state_guard) => {
+                            toggle_always_on_top(app, &mut state_guard);
+                            update_tray_and_badge(app, &state_guard);
                         }
-                    }
-                    "sound_enabled" => {
-                        match state.lock() {
-                            Ok(mut state_guard) => {
-                                state_guard.settings.sound_enabled = !state_guard.settings.sound_enabled;
-                                save_settings(app, &state_guard.settings);
-                                let _ = app.emit("settings-updated", &state_guard.settings);
-                                update_tray_and_badge(app, &state_guard);
-                            }
-                            Err(e) => eprintln!("[eocc] Failed to acquire lock for sound_enabled: {:?}", e),
+                        Err(e) => {
+                            eprintln!("[eocc] Failed to acquire lock for always_on_top: {:?}", e)
                         }
-                    }
+                    },
+                    "sound_enabled" => match state.lock() {
+                        Ok(mut state_guard) => {
+                            state_guard.settings.sound_enabled =
+                                !state_guard.settings.sound_enabled;
+                            save_settings(app, &state_guard.settings);
+                            let _ = app.emit("settings-updated", &state_guard.settings);
+                            update_tray_and_badge(app, &state_guard);
+                        }
+                        Err(e) => {
+                            eprintln!("[eocc] Failed to acquire lock for sound_enabled: {:?}", e)
+                        }
+                    },
                     other => {
                         if let Some((is_active, opacity)) = parse_opacity_menu_id(other) {
                             match state.lock() {
@@ -294,7 +294,9 @@ fn main() {
                                     let _ = app.emit("settings-updated", &state_guard.settings);
                                     update_tray_and_badge(app, &state_guard);
                                 }
-                                Err(e) => eprintln!("[eocc] Failed to acquire lock for opacity: {:?}", e),
+                                Err(e) => {
+                                    eprintln!("[eocc] Failed to acquire lock for opacity: {:?}", e)
+                                }
                             }
                         }
                     }
@@ -305,9 +307,9 @@ fn main() {
             let state_for_tray_clone = Arc::clone(&state_for_tray);
             let app_handle_for_tray = app_handle.clone();
             let tray_menu = {
-                let state_guard = state_for_tray
-                    .lock()
-                    .map_err(|_| tauri::Error::Anyhow(anyhow::anyhow!("Failed to acquire state lock")))?;
+                let state_guard = state_for_tray.lock().map_err(|_| {
+                    tauri::Error::Anyhow(anyhow::anyhow!("Failed to acquire state lock"))
+                })?;
                 build_tray_menu(&app_handle, &state_guard)?
             };
 
@@ -323,25 +325,23 @@ fn main() {
                     "open_dashboard" => {
                         show_dashboard(app);
                     }
-                    "open_logs" => {
-                        match get_app_log_dir(&app_handle_for_tray) {
-                            Ok(log_dir) => {
-                                let _ = opener::open(&log_dir);
-                            }
-                            Err(e) => eprintln!("[eocc] Cannot open logs: {}", e),
+                    "open_logs" => match get_app_log_dir(&app_handle_for_tray) {
+                        Ok(log_dir) => {
+                            let _ = opener::open(&log_dir);
                         }
-                    }
-                    "clear_sessions" => {
-                        match state_for_tray_clone.lock() {
-                            Ok(mut state_guard) => {
-                                state_guard.sessions.clear();
-                                update_tray_and_badge(app, &state_guard);
-                                emit_state_update(app, &state_guard);
-                                save_runtime_state(app, &state_guard);
-                            }
-                            Err(e) => eprintln!("[eocc] Failed to acquire lock for clear_sessions: {:?}", e),
+                        Err(e) => eprintln!("[eocc] Cannot open logs: {}", e),
+                    },
+                    "clear_sessions" => match state_for_tray_clone.lock() {
+                        Ok(mut state_guard) => {
+                            state_guard.sessions.clear();
+                            update_tray_and_badge(app, &state_guard);
+                            emit_state_update(app, &state_guard);
+                            save_runtime_state(app, &state_guard);
                         }
-                    }
+                        Err(e) => {
+                            eprintln!("[eocc] Failed to acquire lock for clear_sessions: {:?}", e)
+                        }
+                    },
                     _ => {}
                 })
                 .on_tray_icon_event(|_tray, event| {
