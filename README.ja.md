@@ -12,16 +12,47 @@ Claude Code の **グローバルHooks** からイベントを収集し、複数
 
 ## 1. setup
 
-### 前提
-
-- Claude Code
-- Node.js v23+
-
 ### 対応プラットフォーム
 
 - [x] macOS（12+）
 - [ ] Linux（動作未検証）
 - [ ] Windows（動作未検証。windowsユーザの方のコントリビューションをお待ちしています🙇🏻‍♂️）
+
+### 前提
+
+- Claude Code
+- Node.js v23+
+
+### インストール
+
+#### 方法1: リリースからダウンロード（推奨）
+
+1. [Releases](https://github.com/joe-re/eyes-on-claude-code/releases) ページにアクセス
+2. お使いのプラットフォームに対応したファイルをダウンロード：
+   - **macOS**: `.dmg` ファイル
+   - **Linux**: `.deb` または `.AppImage` ファイル
+   - **Windows**: `.msi` または `.exe` ファイル
+3. インストールしてアプリを起動
+
+> [!Note]
+> macOSでは「アプリが壊れているため開けません」というエラーが表示される場合があります。[トラブルシューティング](#macos-アプリが壊れているため開けません)を参照してください。
+
+#### 方法2: ソースコードからビルド
+
+```bash
+# リポジトリをクローン
+git clone https://github.com/joe-re/eyes-on-claude-code.git
+cd eyes-on-claude-code
+
+# 依存関係をインストール
+pnpm install
+
+# 開発モードで実行
+pnpm tauri dev
+
+# または本番用にビルド
+pnpm tauri build
+```
 
 ### 初回起動
 
@@ -251,6 +282,23 @@ pnpm tauri icon src-tauri/icons/icon.png
 ```
 
 ## 5. troubleshooting
+
+### macOS: 「アプリが壊れているため開けません」
+
+このエラーはアプリがApple Developer証明書で署名・公証されていないために発生します。以下のコマンドで回避できます：
+
+```bash
+xattr -cr "/Applications/Eyes on Claude Code.app"
+```
+
+マウントしたDMGから開く場合：
+
+```bash
+xattr -cr "/Volumes/Eyes on Claude Code/Eyes on Claude Code.app"
+```
+
+> [!Note]
+> Apple Developer証明書による署名は将来のリリースで対応予定です。
 
 ### Setupモーダルが消えない（hooksがNGのまま）
 

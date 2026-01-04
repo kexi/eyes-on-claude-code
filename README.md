@@ -12,16 +12,47 @@ An app that collects events from Claude Code **global Hooks** and lets you monit
 
 ## 1. Setup
 
-### Prerequisites
-
-- Claude Code
-- Node.js v23+
-
 ### Supported platforms
 
 - [x] macOS (12+)
 - [ ] Linux (untested; may work)
 - [ ] Windows (untested; pls someone helps us 🙇🏻‍♂️)
+
+### Prerequisites
+
+- Claude Code
+- Node.js v23+
+
+### Installation
+
+#### Option 1: Download from Releases (Recommended)
+
+1. Go to [Releases](https://github.com/joe-re/eyes-on-claude-code/releases)
+2. Download the appropriate file for your platform:
+   - **macOS**: `.dmg` file
+   - **Linux**: `.deb` or `.AppImage` file
+   - **Windows**: `.msi` or `.exe` file
+3. Install and launch the app
+
+> [!Note]
+> On macOS, you may see "App is damaged and can't be opened" error. See [Troubleshooting](#macos-app-is-damaged-and-cant-be-opened) for the workaround.
+
+#### Option 2: Build from Source
+
+```bash
+# Clone the repository
+git clone https://github.com/joe-re/eyes-on-claude-code.git
+cd eyes-on-claude-code
+
+# Install dependencies
+pnpm install
+
+# Run in development mode
+pnpm tauri dev
+
+# Or build for production
+pnpm tauri build
+```
 
 ### First launch
 
@@ -250,7 +281,24 @@ pnpm tauri icon src-tauri/icons/icon.png
 
 ## 5. Troubleshooting
 
-### Setup modal won’t disappear (hooks remain invalid)
+### macOS: "App is damaged and can't be opened"
+
+This error occurs because the app is not signed/notarized with an Apple Developer certificate. To bypass this warning, run:
+
+```bash
+xattr -cr "/Applications/Eyes on Claude Code.app"
+```
+
+Or if opening from the mounted DMG:
+
+```bash
+xattr -cr "/Volumes/Eyes on Claude Code/Eyes on Claude Code.app"
+```
+
+> [!Note]
+> Apple Developer certificate signing is planned for a future release.
+
+### Setup modal won't disappear (hooks remain invalid)
 
 - Open `~/.claude/settings.json` and confirm the generated content from the Setup modal was applied correctly
 - Run `/hooks` in Claude Code to confirm hooks are loaded
