@@ -62,11 +62,9 @@ fn get_current_branch(repo_path: &str) -> Option<String> {
 }
 
 fn get_latest_commit(repo_path: &str) -> (String, String) {
-    let hash = run_git_command(repo_path, &["rev-parse", "--short", "HEAD"])
-        .unwrap_or_default();
+    let hash = run_git_command(repo_path, &["rev-parse", "--short", "HEAD"]).unwrap_or_default();
 
-    let time = run_git_command(repo_path, &["log", "-1", "--format=%cr"])
-        .unwrap_or_default();
+    let time = run_git_command(repo_path, &["log", "-1", "--format=%cr"]).unwrap_or_default();
 
     (hash, time)
 }

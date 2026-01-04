@@ -1,8 +1,8 @@
 use std::collections::HashMap;
 use std::io::{BufRead, BufReader, Write};
 use std::process::{Child, Command, Stdio};
-use std::sync::Mutex;
 use std::sync::mpsc;
+use std::sync::Mutex;
 use std::time::Duration;
 
 /// Default base branch for branch diff comparison
@@ -41,7 +41,11 @@ impl DiffType {
                 if base.starts_with('-') {
                     return Err(format!("Invalid branch name: {}", base));
                 }
-                Ok(vec!["diff".to_string(), base.to_string(), "HEAD".to_string()])
+                Ok(vec![
+                    "diff".to_string(),
+                    base.to_string(),
+                    "HEAD".to_string(),
+                ])
             }
         }
     }
@@ -121,13 +125,11 @@ fn get_untracked_diff(repo_path: &str) -> Vec<u8> {
         .output();
 
     let untracked_files = match untracked_output {
-        Ok(output) if output.status.success() => {
-            String::from_utf8_lossy(&output.stdout)
-                .lines()
-                .filter(|s| !s.is_empty())
-                .map(|s| s.to_string())
-                .collect::<Vec<_>>()
-        }
+        Ok(output) if output.status.success() => String::from_utf8_lossy(&output.stdout)
+            .lines()
+            .filter(|s| !s.is_empty())
+            .map(|s| s.to_string())
+            .collect::<Vec<_>>(),
         _ => return Vec::new(),
     };
 

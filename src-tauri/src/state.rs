@@ -134,7 +134,8 @@ impl AppState {
         self.sessions
             .values()
             .filter(|s| {
-                s.status == SessionStatus::WaitingPermission || s.status == SessionStatus::WaitingInput
+                s.status == SessionStatus::WaitingPermission
+                    || s.status == SessionStatus::WaitingInput
             })
             .count()
     }

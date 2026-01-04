@@ -123,21 +123,14 @@ export const SessionCard = ({ session }: SessionCardProps) => {
       className={`bg-bg-secondary rounded-xl transition-all hover:shadow-lg hover:shadow-black/30 ${borderColor} overflow-hidden`}
     >
       {/* Header - Clickable to expand */}
-      <div
-        className="flex items-center p-2 gap-2 cursor-pointer"
-        onClick={handleToggleExpand}
-      >
-        <div className="text-base w-6 shrink-0 text-center">
-          {getStatusEmoji(session.status)}
-        </div>
+      <div className="flex items-center p-2 gap-2 cursor-pointer" onClick={handleToggleExpand}>
+        <div className="text-base w-6 shrink-0 text-center">{getStatusEmoji(session.status)}</div>
         <div className="flex-1 min-w-0 overflow-hidden">
           <div className="font-semibold truncate text-xs">{session.project_name}</div>
           <div className="font-mono text-text-secondary truncate text-[0.5rem]">
             {session.project_dir}
           </div>
-          {relativeTime && (
-            <div className="text-text-secondary text-[0.5rem]">{relativeTime}</div>
-          )}
+          {relativeTime && <div className="text-text-secondary text-[0.5rem]">{relativeTime}</div>}
           {session.waiting_for && (
             <div className="text-warning bg-warning/10 rounded inline-block mt-1 truncate max-w-full text-[0.5rem] py-0.5 px-1">
               ⏸ {session.waiting_for}
@@ -209,7 +202,9 @@ export const SessionCard = ({ session }: SessionCardProps) => {
               <div className="flex items-center justify-between py-0.5">
                 <div className="flex items-center gap-1 min-w-0">
                   <span className="text-text-secondary text-[0.625rem] shrink-0">commit:</span>
-                  <span className="text-info text-[0.625rem] font-mono">#{gitInfo.latest_commit_hash}</span>
+                  <span className="text-info text-[0.625rem] font-mono">
+                    #{gitInfo.latest_commit_hash}
+                  </span>
                 </div>
                 <DiffButton onClick={() => handleDiffClick('commit')} small />
               </div>

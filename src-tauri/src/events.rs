@@ -101,7 +101,8 @@ pub fn drain_events_queue(app: &tauri::AppHandle, state: &mut AppState) -> Vec<E
         .map(|d| d.as_millis())
         .unwrap_or(0);
     let pid = std::process::id();
-    let processing_path = events_file.with_file_name(format!("events.processing.{}.{}.jsonl", ts, pid));
+    let processing_path =
+        events_file.with_file_name(format!("events.processing.{}.{}.jsonl", ts, pid));
 
     // Atomically move the queue file out of the way so the hook can keep appending to a fresh file.
     if let Err(e) = std::fs::rename(&events_file, &processing_path) {

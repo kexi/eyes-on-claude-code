@@ -1,19 +1,19 @@
-import { execSync } from "node:child_process";
-import { readFileSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { execSync } from 'node:child_process';
+import { readFileSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
 
 function sh(cmd, opts = {}) {
   // cargo metadata can be very large; increase buffer to avoid ENOBUFS.
   return execSync(cmd, {
-    stdio: ["ignore", "pipe", "pipe"],
-    encoding: "utf8",
+    stdio: ['ignore', 'pipe', 'pipe'],
+    encoding: 'utf8',
     maxBuffer: 256 * 1024 * 1024,
     ...opts,
   });
 }
 
 function summarizePnpmLicenses(repoRoot) {
-  const jsonText = sh("pnpm licenses list --json", { cwd: repoRoot });
+  const jsonText = sh('pnpm licenses list --json', { cwd: repoRoot });
   const byLicense = JSON.parse(jsonText);
 
   const counts = Object.entries(byLicense)
@@ -21,7 +21,7 @@ function summarizePnpmLicenses(repoRoot) {
     .sort((a, b) => b[1] - a[1]);
 
   const nonMit = Object.keys(byLicense)
-    .filter((l) => l !== "MIT")
+    .filter((l) => l !== 'MIT')
     .sort()
     .map((lic) => ({
       license: lic,
@@ -39,28 +39,30 @@ function summarizePnpmLicenses(repoRoot) {
 }
 
 function summarizeCargoLicenses(repoRoot) {
-  const cargoDir = join(repoRoot, "src-tauri");
-  const metaText = sh("CARGO_NET_OFFLINE=true cargo metadata --format-version 1", { cwd: cargoDir });
+  const cargoDir = join(repoRoot, 'src-tauri');
+  const metaText = sh('CARGO_NET_OFFLINE=true cargo metadata --format-version 1', {
+    cwd: cargoDir,
+  });
   const meta = JSON.parse(metaText);
   const pkgs = meta.packages ?? [];
 
   const counts = new Map();
   const byLicense = new Map();
   for (const p of pkgs) {
-    const lic = (p.license ?? "UNKNOWN").trim() || "UNKNOWN";
+    const lic = (p.license ?? 'UNKNOWN').trim() || 'UNKNOWN';
     counts.set(lic, (counts.get(lic) ?? 0) + 1);
     if (!byLicense.has(lic)) byLicense.set(lic, []);
     byLicense.get(lic).push({ name: p.name, version: p.version });
   }
 
   const topLicenses = [...counts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 30);
-  const unknown = (byLicense.get("UNKNOWN") ?? []).sort((a, b) => a.name.localeCompare(b.name));
+  const unknown = (byLicense.get('UNKNOWN') ?? []).sort((a, b) => a.name.localeCompare(b.name));
 
   // “MIT配布と相性が悪い可能性が高い”ものを機械的に抽出（ただし OR で回避可能なものは手動判断）
   const suspectRe = /(\bAGPL\b|\bGPL\b|\bLGPL\b|SSPL|BUSL|CPAL|EUPL)/i;
   const suspect = [];
   for (const [lic, arr] of byLicense.entries()) {
-    if (lic !== "UNKNOWN" && suspectRe.test(lic)) {
+    if (lic !== 'UNKNOWN' && suspectRe.test(lic)) {
       for (const x of arr) suspect.push({ ...x, license: lic });
     }
   }
@@ -85,11 +87,13 @@ function main() {
     rust: rustSummary,
   };
 
-  writeFileSync(join(repoRoot, "license-report.json"), JSON.stringify(report, null, 2) + "\n", "utf8");
-  // eslint-disable-next-line no-console
-  console.log("Wrote license-report.json");
+  writeFileSync(
+    join(repoRoot, 'license-report.json'),
+    JSON.stringify(report, null, 2) + '\n',
+    'utf8'
+  );
+   
+  console.log('Wrote license-report.json');
 }
 
 main();
-
-

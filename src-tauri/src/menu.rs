@@ -6,7 +6,9 @@ use tauri::{
     Runtime,
 };
 
-use crate::state::{AppState, EventInfo, EventType, NotificationType, SessionInfo, SessionStatus, Settings};
+use crate::state::{
+    AppState, EventInfo, EventType, NotificationType, SessionInfo, SessionStatus, Settings,
+};
 
 /// Get emoji for event type
 fn get_event_emoji(event: &EventInfo) -> &'static str {
@@ -57,7 +59,8 @@ fn build_opacity_submenu<R: Runtime>(
     app: &tauri::AppHandle<R>,
     settings: &Settings,
 ) -> tauri::Result<Submenu<R>> {
-    let opacity_inactive_label = format!("Inactive: {}%", (settings.opacity_inactive * 100.0) as i32);
+    let opacity_inactive_label =
+        format!("Inactive: {}%", (settings.opacity_inactive * 100.0) as i32);
     let opacity_active_label = format!("Active: {}%", (settings.opacity_active * 100.0) as i32);
 
     SubmenuBuilder::new(app, "Opacity")
@@ -100,10 +103,16 @@ fn build_help_events_submenu<R: Runtime>(
             let emoji = get_event_emoji(event);
             let event_name = get_event_name(&event.event_type);
             // Format timestamp for display (extract time portion)
-            let time_str = event.timestamp.split('T').nth(1)
+            let time_str = event
+                .timestamp
+                .split('T')
+                .nth(1)
                 .map(|t| t.split('.').next().unwrap_or(t))
                 .unwrap_or(&event.timestamp);
-            let title = format!("{} {} {} ({})", emoji, event.project_name, event_name, time_str);
+            let title = format!(
+                "{} {} {} ({})",
+                emoji, event.project_name, event_name, time_str
+            );
             let item = MenuItemBuilder::with_id(format!("help_event_{}", idx), &title)
                 .enabled(false)
                 .build(app)?;
@@ -145,9 +154,11 @@ pub fn build_app_menu<R: Runtime>(
         .copy()
         .paste()
         .separator()
-        .item(&MenuItemBuilder::with_id("find", "Find")
-            .accelerator("CmdOrCtrl+F")
-            .build(app)?)
+        .item(
+            &MenuItemBuilder::with_id("find", "Find")
+                .accelerator("CmdOrCtrl+F")
+                .build(app)?,
+        )
         .build()?;
 
     // Window menu
@@ -214,9 +225,10 @@ fn build_session_items<R: Runtime>(
         for session in sessions.values() {
             let emoji = session.status.emoji();
             let title = format!("{} {}", emoji, session.project_name);
-            let item = MenuItemBuilder::with_id(format!("session_{}", session.project_name), &title)
-                .enabled(false)
-                .build(app)?;
+            let item =
+                MenuItemBuilder::with_id(format!("session_{}", session.project_name), &title)
+                    .enabled(false)
+                    .build(app)?;
             items.push(item);
         }
     }
@@ -285,13 +297,7 @@ pub fn build_tray_menu<R: Runtime>(
     let clear_sessions = MenuItemBuilder::with_id("clear_sessions", "Clear Sessions").build(app)?;
 
     // Build menu
-    let menu = Menu::with_items(
-        app,
-        &[
-            &header,
-            &PredefinedMenuItem::separator(app)?,
-        ],
-    )?;
+    let menu = Menu::with_items(app, &[&header, &PredefinedMenuItem::separator(app)?])?;
 
     for item in &session_items {
         menu.append(item)?;
@@ -312,4 +318,3 @@ pub fn build_tray_menu<R: Runtime>(
 
     Ok(menu)
 }
-

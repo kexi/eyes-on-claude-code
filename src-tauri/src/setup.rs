@@ -12,8 +12,8 @@ fn atomic_write(path: &Path, content: &[u8]) -> Result<(), String> {
     let temp_path = path.with_extension("tmp");
 
     // Write to temp file
-    let mut file = fs::File::create(&temp_path)
-        .map_err(|e| format!("Failed to create temp file: {:?}", e))?;
+    let mut file =
+        fs::File::create(&temp_path).map_err(|e| format!("Failed to create temp file: {:?}", e))?;
     file.write_all(content)
         .map_err(|e| format!("Failed to write to temp file: {:?}", e))?;
     file.sync_all()
@@ -456,9 +456,7 @@ pub fn generate_merged_settings(hook_script_path: &str) -> Result<String, String
     // Merge each hook type from our config
     if let Some(new_hooks_obj) = new_hooks_config.as_object() {
         for (hook_type, new_hook_array) in new_hooks_obj {
-            let existing_array = existing_hooks
-                .as_ref()
-                .and_then(|h| h.get(hook_type));
+            let existing_array = existing_hooks.as_ref().and_then(|h| h.get(hook_type));
             merged_hooks.insert(
                 hook_type.clone(),
                 merge_hook_array(existing_array, new_hook_array),
@@ -483,9 +481,8 @@ pub fn get_setup_status(app: &tauri::AppHandle) -> SetupStatus {
     let hook_installed = is_hook_installed(app);
     let hooks = check_claude_settings();
 
-    let merged_settings = generate_merged_settings(&tilde_path).unwrap_or_else(|e| {
-        serde_json::json!({"error": e}).to_string()
-    });
+    let merged_settings = generate_merged_settings(&tilde_path)
+        .unwrap_or_else(|e| serde_json::json!({"error": e}).to_string());
 
     let init_error = get_init_error();
 
@@ -505,8 +502,7 @@ pub fn initialize_setup(app: &tauri::AppHandle) -> Result<(), String> {
 
     // Create log directory (~/.eocc/logs)
     let log_dir = get_log_dir(app)?;
-    fs::create_dir_all(&log_dir)
-        .map_err(|e| format!("Failed to create log directory: {:?}", e))?;
+    fs::create_dir_all(&log_dir).map_err(|e| format!("Failed to create log directory: {:?}", e))?;
 
     // Create empty events file if it doesn't exist
     let events_file = log_dir.join("events.jsonl");
