@@ -53,7 +53,7 @@ jobs:
           - platform: macos-latest
             target: aarch64-apple-darwin
             name: macOS (Apple Silicon)
-          - platform: macos-13
+          - platform: macos-15-large
             target: x86_64-apple-darwin
             name: macOS (Intel)
           - platform: ubuntu-22.04
