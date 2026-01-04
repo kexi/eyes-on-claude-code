@@ -140,11 +140,11 @@ pnpm tauri dev
 **アプリデータ**
 
 ```
-~/Library/Application Support/com.local.eyes-on-claude-code/  # macOS
+~/Library/Application Support/me.joe-re.eocc/  # macOS
   ├── settings.json          # アプリ設定
   └── runtime_state.json     # セッション状態（アプリ再起動時に復元）
 
-~/Library/Logs/com.local.eyes-on-claude-code/  # macOS
+~/Library/Logs/me.joe-re.eocc/  # macOS
   └── *.log                  # アプリログ
 ```
 
@@ -212,8 +212,8 @@ pnpm tauri build
 ### ログが増えない / セッションが表示されない
 
 - アプリログを確認
-  - `ls -la ~/Library/Logs/com.local.eyes-on-claude-code/`
-  - `cat ~/Library/Logs/com.local.eyes-on-claude-code/*.log | grep -i error`
+  - `ls -la ~/Library/Logs/me.joe-re.eocc/`
+  - `cat ~/Library/Logs/me.joe-re.eocc/*.log | grep -i error`
 - `events.jsonl` が作成/更新されているか確認
   - `ls -la ~/.eocc/logs/`
 - Hookが呼ばれているか確認（Claude Codeで `/hooks` を実行）
@@ -237,4 +237,10 @@ pnpm tauri build
 
 依存関係（Node/Rust）のライセンス概要と、依存ライセンスレポート生成手順は `THIRD_PARTY_NOTICES.md` を参照してください。
 
-ライセンス明記の詳細手順は `LICENSING.ja.md` を参照してください。
+## 7. プライバシー / データの取り扱い
+
+- **ローカル完結**: 本アプリはHookイベントをローカルで処理し、テレメトリ/解析目的の送信は実装していません。
+- **保存されるもの**:
+  - `~/.eocc/logs/events.jsonl`: Hookが追記するイベントキュー（アプリが処理後に消費/クリア）
+  - アプリログ: 生のイベントJSON行もアプリログに出力されます（`tauri-plugin-log` によりローテート）
+- **注意**: Claude Code 側のHookペイロードによっては `message` などが含まれるため、機密情報が混ざり得ます。

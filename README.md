@@ -138,11 +138,11 @@ pnpm tauri dev
 **App data**
 
 ```
-~/Library/Application Support/com.local.eyes-on-claude-code/  # macOS
+~/Library/Application Support/me.joe-re.eocc/  # macOS
   ├── settings.json          # App settings
   └── runtime_state.json     # Session state (restored on app restart)
 
-~/Library/Logs/com.local.eyes-on-claude-code/  # macOS
+~/Library/Logs/me.joe-re.eocc/  # macOS
   └── *.log                  # App logs
 ```
 
@@ -210,8 +210,8 @@ Artifacts (macOS example):
 ### Logs don’t increase / sessions don’t show up
 
 - Check the app logs
-  - `ls -la ~/Library/Logs/com.local.eyes-on-claude-code/`
-  - `cat ~/Library/Logs/com.local.eyes-on-claude-code/*.log | grep -i error`
+  - `ls -la ~/Library/Logs/me.joe-re.eocc/`
+  - `cat ~/Library/Logs/me.joe-re.eocc/*.log | grep -i error`
 - Check whether `events.jsonl` is created/updated
   - `ls -la ~/.eocc/logs/`
 - Check whether the hook is being called (run `/hooks` in Claude Code)
@@ -234,3 +234,11 @@ Artifacts (macOS example):
 This project is licensed under the MIT License. See `LICENSE`.
 
 For third-party license notes and how to generate a dependency license report, see `THIRD_PARTY_NOTICES.md`.
+
+## 7. Privacy / data handling
+
+- **Local-only**: the app processes hook events locally and does not implement telemetry/analytics.
+- **What is stored**:
+  - `~/.eocc/logs/events.jsonl`: event queue written by the hook (consumed/cleared by the app)
+  - App logs: raw event JSON lines are also written to the app log (rotated by `tauri-plugin-log`)
+- **Note**: events may include fields like `message` depending on Claude Code hook payloads. Treat this data as potentially sensitive.
