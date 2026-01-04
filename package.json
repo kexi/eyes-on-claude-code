@@ -27,6 +27,7 @@
     "lint": "pnpm lint:ts && pnpm lint:rust",
     "lint:ts": "eslint .",
     "lint:ts:fix": "eslint . --fix",
+    "typecheck": "tsc --noEmit",
     "lint:rust": "cargo fmt --check --manifest-path src-tauri/Cargo.toml && cargo clippy --manifest-path src-tauri/Cargo.toml -- -D warnings",
     "lint:rust:fix": "cargo fmt --manifest-path src-tauri/Cargo.toml",
     "format": "prettier --write .",

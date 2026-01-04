@@ -54,7 +54,7 @@ jobs:
         run: pnpm format:check
 
       - name: TypeScript type check
-        run: pnpm exec tsc --noEmit
+        run: pnpm typecheck
 
   rust:
     name: Rust Lint
