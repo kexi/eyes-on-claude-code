@@ -1,6 +1,21 @@
 {
   "name": "eyes-on-claude-code",
   "version": "0.0.2",
+  "description": "A menubar app to monitor your Claude Code sessions, view git changes, and get notifications for permission prompts",
+  "keywords": [
+    "claude",
+    "claude-code",
+    "tauri",
+    "menubar",
+    "session-manager"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/joe-re/eyes-on-claude-code.git"
+  },
+  "bugs": "https://github.com/joe-re/eyes-on-claude-code/issues",
+  "homepage": "https://github.com/joe-re/eyes-on-claude-code",
+  "author": "joe-re",
   "license": "MIT",
   "type": "module",
   "scripts": {
