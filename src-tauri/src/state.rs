@@ -15,12 +15,13 @@ pub enum EventType {
     Unknown,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum NotificationType {
     PermissionPrompt,
     IdlePrompt,
     #[serde(other)]
+    #[default]
     Other,
 }
 
@@ -38,12 +39,6 @@ pub struct EventInfo {
     pub notification_type: NotificationType,
     #[serde(default)]
     pub tool_name: String,
-}
-
-impl Default for NotificationType {
-    fn default() -> Self {
-        NotificationType::Other
-    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -127,6 +122,7 @@ impl Default for Settings {
     }
 }
 
+#[derive(Default)]
 pub struct AppState {
     pub sessions: HashMap<String, SessionInfo>,
     pub recent_events: VecDeque<EventInfo>,
@@ -184,16 +180,6 @@ impl AppState {
                 last_event: event.timestamp.clone(),
                 waiting_for,
             });
-    }
-}
-
-impl Default for AppState {
-    fn default() -> Self {
-        Self {
-            sessions: HashMap::new(),
-            recent_events: VecDeque::new(),
-            settings: Settings::default(),
-        }
     }
 }
 

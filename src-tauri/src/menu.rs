@@ -211,7 +211,7 @@ fn build_session_items<R: Runtime>(
             .build(app)?;
         items.push(header);
 
-        for (_, session) in sessions {
+        for session in sessions.values() {
             let emoji = session.status.emoji();
             let title = format!("{} {}", emoji, session.project_name);
             let item = MenuItemBuilder::with_id(format!("session_{}", session.project_name), &title)

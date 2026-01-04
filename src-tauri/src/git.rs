@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 use std::path::Path;
 use std::process::Command;
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct GitInfo {
     pub branch: String,
     pub default_branch: String,
@@ -11,20 +11,6 @@ pub struct GitInfo {
     pub has_unstaged_changes: bool,
     pub has_staged_changes: bool,
     pub is_git_repo: bool,
-}
-
-impl Default for GitInfo {
-    fn default() -> Self {
-        Self {
-            branch: String::new(),
-            default_branch: String::new(),
-            latest_commit_hash: String::new(),
-            latest_commit_time: String::new(),
-            has_unstaged_changes: false,
-            has_staged_changes: false,
-            is_git_repo: false,
-        }
-    }
 }
 
 /// Get git information for a repository
