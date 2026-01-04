@@ -818,7 +818,7 @@ dependencies = [
 
 [[package]]
 name = "eyes-on-claude-code"
-version = "1.0.0"
+version = "0.0.2"
 dependencies = [
  "anyhow",
  "base64 0.22.1",
