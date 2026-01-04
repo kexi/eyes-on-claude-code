@@ -112,6 +112,48 @@ impl Default for DifitProcessRegistry {
     }
 }
 
+/// Get diff content for untracked files
+fn get_untracked_diff(repo_path: &str) -> Vec<u8> {
+    // Get list of untracked files
+    let untracked_output = Command::new("git")
+        .args(["ls-files", "--others", "--exclude-standard"])
+        .current_dir(repo_path)
+        .output();
+
+    let untracked_files = match untracked_output {
+        Ok(output) if output.status.success() => {
+            String::from_utf8_lossy(&output.stdout)
+                .lines()
+                .filter(|s| !s.is_empty())
+                .map(|s| s.to_string())
+                .collect::<Vec<_>>()
+        }
+        _ => return Vec::new(),
+    };
+
+    if untracked_files.is_empty() {
+        return Vec::new();
+    }
+
+    // Generate diff for each untracked file
+    let mut combined_diff = Vec::new();
+    for file in untracked_files {
+        let diff_output = Command::new("git")
+            .args(["diff", "--no-index", "--", "/dev/null", &file])
+            .current_dir(repo_path)
+            .output();
+
+        if let Ok(output) = diff_output {
+            // git diff --no-index returns exit code 1 when there are differences
+            if !output.stdout.is_empty() {
+                combined_diff.extend_from_slice(&output.stdout);
+            }
+        }
+    }
+
+    combined_diff
+}
+
 /// Start a difit server for the specified repository and diff type
 /// Returns the URL and process handle for management
 pub fn start_difit_server(
@@ -134,7 +176,13 @@ pub fn start_difit_server(
         return Err(format!("git diff failed: {}", stderr));
     }
 
-    let diff_content = git_output.stdout;
+    let mut diff_content = git_output.stdout;
+
+    // For unstaged diff, also include untracked files
+    if matches!(diff_type, DiffType::Unstaged) {
+        let untracked_diff = get_untracked_diff(repo_path);
+        diff_content.extend(untracked_diff);
+    }
 
     if diff_content.is_empty() {
         return Err("No diff content to display".to_string());
