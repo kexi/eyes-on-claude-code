@@ -92,7 +92,7 @@ function main() {
     JSON.stringify(report, null, 2) + '\n',
     'utf8'
   );
-   
+
   console.log('Wrote license-report.json');
 }
 

@@ -18,5 +18,3 @@ export const defaultSettings: Settings = {
 };
 
 export const AppContext = createContext<AppContextValue | null>(null);
-
-
