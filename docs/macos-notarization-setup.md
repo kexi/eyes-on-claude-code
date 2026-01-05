@@ -71,7 +71,51 @@ The Key ID shown in App Store Connect (e.g., `XXXXXXXXXX`).
 
 The Issuer ID shown in App Store Connect (e.g., `xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx`).
 
-## Verification
+## Local Verification
+
+Before configuring GitHub secrets, verify your local setup using the provided script:
+
+```bash
+./scripts/setup-macos-codesign.sh verify
+```
+
+This will check:
+- Available code signing certificates in your Keychain
+- Whether a Developer ID Application certificate is present
+- Notarization environment variables (if set)
+
+Example output:
+```
+[INFO] Checking for code signing certificates...
+
+Available signing identities:
+  1) XXXXXXXXXX "Developer ID Application: Your Name (TEAM_ID)"
+     1 valid identities found
+
+[INFO] Developer ID Application certificate found
+[INFO] Certificate: Developer ID Application: Your Name (TEAM_ID)
+[INFO] Checking notarization credentials...
+[WARN] Missing notarization environment variables:
+  - APPLE_API_KEY
+  - APPLE_API_KEY_ID
+  - APPLE_API_ISSUER
+[INFO] Notarization will be skipped without these variables
+
+[INFO] Certificate verification complete
+```
+
+To test with notarization credentials locally:
+
+```bash
+export APPLE_SIGNING_IDENTITY="Developer ID Application: Your Name (TEAM_ID)"
+export APPLE_API_KEY="$(cat /path/to/AuthKey_XXXXXXXXXX.p8)"
+export APPLE_API_KEY_ID="XXXXXXXXXX"
+export APPLE_API_ISSUER="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+
+./scripts/setup-macos-codesign.sh verify
+```
+
+## CI Verification
 
 After setting up all secrets, trigger a release workflow. The build logs should show:
 
