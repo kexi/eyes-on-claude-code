@@ -60,7 +60,9 @@ pub fn list_panes() -> Result<Vec<TmuxPane>, String> {
 }
 
 pub fn capture_pane(pane_id: &str) -> Result<String, String> {
-    run_tmux_command(&["capture-pane", "-p", "-t", pane_id])
+    // -S -: start from the beginning of history
+    // -E -: end at the last line
+    run_tmux_command(&["capture-pane", "-p", "-S", "-", "-E", "-", "-t", pane_id])
 }
 
 pub fn send_keys(pane_id: &str, keys: &str) -> Result<(), String> {
