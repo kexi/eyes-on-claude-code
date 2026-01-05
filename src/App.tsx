@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { AppProvider } from '@/context/AppContext';
 import { useAppContext } from '@/context/useAppContext';
 import { useWindowOpacity } from '@/hooks/useWindowOpacity';
@@ -7,6 +7,7 @@ import { Header } from '@/components/Header';
 import { SessionList } from '@/components/SessionList';
 import { SetupModal } from '@/components/SetupModal';
 import { TmuxPanel } from '@/components/TmuxPanel';
+import { TmuxViewer } from '@/components/TmuxViewer';
 import {
   onWindowFocus,
   bringDiffWindowsToFront,
@@ -98,8 +99,19 @@ function App() {
   const [showSetupModal, setShowSetupModal] = useState(false);
   const [setupChecked, setSetupChecked] = useState(false);
 
-  // Check setup status on mount
+  // Parse URL parameters to check if this is a tmux viewer window
+  const tmuxPaneId = useMemo(() => {
+    const params = new URLSearchParams(window.location.search);
+    return params.get('tmux_pane');
+  }, []);
+
+  // Check setup status on mount (skip for tmux viewer windows)
   useEffect(() => {
+    if (tmuxPaneId) {
+      setSetupChecked(true);
+      return;
+    }
+
     getSetupStatus()
       .then((status) => {
         setSetupStatus(status);
@@ -115,13 +127,18 @@ function App() {
         console.error('Failed to get setup status:', err);
         setSetupChecked(true);
       });
-  }, []);
+  }, [tmuxPaneId]);
 
   const handleSetupComplete = () => {
     setShowSetupModal(false);
     // Restore miniview size
     setWindowSizeForSetup(false).catch(console.error);
   };
+
+  // Render tmux viewer if pane_id is in URL
+  if (tmuxPaneId) {
+    return <TmuxViewer paneId={tmuxPaneId} />;
+  }
 
   // Wait for setup check before showing anything
   if (!setupChecked) {

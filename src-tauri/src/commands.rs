@@ -390,6 +390,34 @@ pub fn open_claude_settings() -> Result<(), String> {
 // ============================================================================
 
 #[tauri::command]
+pub fn open_tmux_viewer(pane_id: String, app: tauri::AppHandle) -> Result<(), String> {
+    use std::collections::hash_map::DefaultHasher;
+    use std::hash::{Hash, Hasher};
+
+    let mut hasher = DefaultHasher::new();
+    pane_id.hash(&mut hasher);
+    let window_label = format!("tmux-viewer-{:x}", hasher.finish());
+
+    // Check if window already exists - if so, focus it and return
+    if let Some(existing_window) = app.get_webview_window(&window_label) {
+        let _ = existing_window.show();
+        let _ = existing_window.set_focus();
+        return Ok(());
+    }
+
+    let url = format!("index.html?tmux_pane={}", urlencoding::encode(&pane_id));
+
+    WebviewWindowBuilder::new(&app, &window_label, WebviewUrl::App(url.into()))
+        .title(format!("tmux - {}", pane_id))
+        .inner_size(800.0, 600.0)
+        .center()
+        .build()
+        .map_err(|e| format!("Failed to create tmux viewer window: {}", e))?;
+
+    Ok(())
+}
+
+#[tauri::command]
 pub fn tmux_is_available() -> bool {
     tmux::is_tmux_available()
 }

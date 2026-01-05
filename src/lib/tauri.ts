@@ -58,3 +58,4 @@ export const tmuxListPanes = () => invoke<TmuxPane[]>('tmux_list_panes');
 export const tmuxCapturePane = (paneId: string) => invoke<string>('tmux_capture_pane', { paneId });
 export const tmuxSendKeys = (paneId: string, keys: string) =>
   invoke('tmux_send_keys', { paneId, keys });
+export const openTmuxViewer = (paneId: string) => invoke('open_tmux_viewer', { paneId });

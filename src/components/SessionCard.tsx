@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import type { SessionInfo, GitInfo } from '@/types';
 import { getStatusEmoji, getStatusClass, formatRelativeTime } from '@/lib/utils';
-import { removeSession, getRepoGitInfo, openDiff, tmuxCapturePane, type DiffType } from '@/lib/tauri';
+import { removeSession, getRepoGitInfo, openDiff, openTmuxViewer, type DiffType } from '@/lib/tauri';
 import { ChevronDownIcon, RefreshIcon } from './icons';
 import { DiffButton } from './DiffButton';
 
@@ -17,8 +17,6 @@ export const SessionCard = ({ session }: SessionCardProps) => {
   const [isLoadingGit, setIsLoadingGit] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [relativeTime, setRelativeTime] = useState(() => formatRelativeTime(session.last_event));
-  const [paneContent, setPaneContent] = useState<string | null>(null);
-  const [isLoadingPane, setIsLoadingPane] = useState(false);
   const isLoadingGitRef = useRef(false);
   const lastFocusFetchTimeRef = useRef(0);
 
@@ -78,11 +76,6 @@ export const SessionCard = ({ session }: SessionCardProps) => {
     setGitInfo(null);
   }, [session.last_event]);
 
-  // Reset pane content when tmux_pane changes
-  useEffect(() => {
-    setPaneContent(null);
-  }, [session.tmux_pane]);
-
   // Load git info when expanded
   useEffect(() => {
     if (isExpanded && !gitInfo && !isLoadingGit) {
@@ -119,21 +112,17 @@ export const SessionCard = ({ session }: SessionCardProps) => {
     }
   };
 
-  const loadPaneContent = useCallback(async () => {
-    if (!session.tmux_pane || isLoadingPane) return;
-    setIsLoadingPane(true);
-    setError(null);
+  const handleOpenTmuxViewer = async () => {
+    if (!session.tmux_pane) return;
     try {
-      const content = await tmuxCapturePane(session.tmux_pane);
-      setPaneContent(content);
+      setError(null);
+      await openTmuxViewer(session.tmux_pane);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
-      setError(`Failed to load tmux pane: ${message}`);
-      setPaneContent(null);
-    } finally {
-      setIsLoadingPane(false);
+      setError(`Failed to open tmux viewer: ${message}`);
+      console.error('Failed to open tmux viewer:', err);
     }
-  }, [session.tmux_pane, isLoadingPane]);
+  };
 
   const borderColor = {
     waiting: 'border-l-4 border-warning',
@@ -268,20 +257,12 @@ export const SessionCard = ({ session }: SessionCardProps) => {
                   </span>
                 </div>
                 <button
-                  onClick={loadPaneContent}
-                  disabled={isLoadingPane}
-                  className="text-[0.625rem] text-text-secondary hover:text-white px-1.5 py-0.5 bg-bg-card rounded hover:bg-white/10 transition-colors disabled:opacity-50"
+                  onClick={handleOpenTmuxViewer}
+                  className="text-[0.625rem] text-text-secondary hover:text-white px-1.5 py-0.5 bg-bg-card rounded hover:bg-white/10 transition-colors"
                 >
-                  {isLoadingPane ? 'Loading...' : paneContent !== null ? 'Refresh' : 'View'}
+                  Display TMUX session
                 </button>
               </div>
-              {paneContent !== null && (
-                <div className="mt-1.5 bg-black/30 rounded p-2 max-h-32 overflow-auto">
-                  <pre className="text-[0.5rem] text-text-primary font-mono whitespace-pre-wrap">
-                    {paneContent || '(empty)'}
-                  </pre>
-                </div>
-              )}
             </div>
           )}
 

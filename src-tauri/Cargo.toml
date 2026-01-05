@@ -19,6 +19,7 @@ dirs = "6"
 opener = "0.8"
 anyhow = "1"
 base64 = "0.22"
+urlencoding = "2"
 
 [profile.release]
 strip = true
