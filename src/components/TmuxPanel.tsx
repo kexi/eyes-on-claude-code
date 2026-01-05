@@ -126,12 +126,12 @@ export const TmuxPanel = () => {
   const tree = buildTree(panes);
 
   return (
-    <div className="flex h-full flex-col">
+    <div className="flex flex-1 flex-col min-h-0">
       {error && (
         <div className="mx-2 mt-2 rounded bg-red-900/50 px-3 py-2 text-sm text-red-200">{error}</div>
       )}
 
-      <div className="flex flex-1 overflow-hidden">
+      <div className="flex flex-1 overflow-hidden min-h-0">
         {/* Left: Tree view */}
         <div className="w-1/3 overflow-y-auto border-r border-white/10 p-2">
           <div className="mb-2 flex items-center justify-between">

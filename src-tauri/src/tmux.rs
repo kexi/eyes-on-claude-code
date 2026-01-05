@@ -64,6 +64,9 @@ pub fn capture_pane(pane_id: &str) -> Result<String, String> {
 }
 
 pub fn send_keys(pane_id: &str, keys: &str) -> Result<(), String> {
-    run_tmux_command(&["send-keys", "-t", pane_id, keys])?;
+    log::info!(target: "eocc.tmux", "send_keys: pane_id={}, keys={}", pane_id, keys);
+    let result = run_tmux_command(&["send-keys", "-t", pane_id, keys]);
+    log::info!(target: "eocc.tmux", "send_keys result: {:?}", result);
+    result?;
     Ok(())
 }
