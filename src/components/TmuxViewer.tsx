@@ -175,6 +175,11 @@ export const TmuxViewer = ({ paneId }: TmuxViewerProps) => {
     return () => window.removeEventListener('focus', handleWindowFocus);
   }, []);
 
+  // Refocus hidden input on any click within the window
+  const handleContainerClick = useCallback(() => {
+    inputRef.current?.focus();
+  }, []);
+
   useEffect(() => {
     loadContent();
     const timer = setTimeout(() => setIsFadedIn(true), 50);
@@ -197,6 +202,7 @@ export const TmuxViewer = ({ paneId }: TmuxViewerProps) => {
       className={`relative flex h-screen flex-col bg-bg-primary transition-opacity duration-300 ${
         isFadedIn ? 'opacity-100' : 'opacity-0'
       }`}
+      onClick={handleContainerClick}
     >
       {error && (
         <div className="mx-2 mt-2 rounded bg-red-900/50 px-3 py-2 text-sm text-red-200">{error}</div>
