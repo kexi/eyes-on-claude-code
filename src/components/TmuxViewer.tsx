@@ -120,12 +120,14 @@ export const TmuxViewer = ({ paneId }: TmuxViewerProps) => {
         e.preventDefault();
         try {
           await tmuxSendKeys(paneId, tmuxKey);
+          // Refresh immediately after sending key for responsive feedback
+          loadContent();
         } catch (err) {
           console.error('Failed to send key:', err);
         }
       }
     },
-    [paneId]
+    [paneId, loadContent]
   );
 
   const handleCompositionStart = useCallback(() => {
@@ -144,6 +146,8 @@ export const TmuxViewer = ({ paneId }: TmuxViewerProps) => {
       if (text) {
         try {
           await tmuxSendKeys(paneId, text);
+          // Refresh immediately after sending composed text
+          loadContent();
         } catch (err) {
           console.error('Failed to send composed text:', err);
         }
@@ -158,7 +162,7 @@ export const TmuxViewer = ({ paneId }: TmuxViewerProps) => {
         justComposedRef.current = false;
       }, 100);
     },
-    [paneId]
+    [paneId, loadContent]
   );
 
   useEffect(() => {
