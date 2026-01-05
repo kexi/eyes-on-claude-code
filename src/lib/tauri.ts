@@ -1,7 +1,7 @@
 import { invoke } from '@tauri-apps/api/core';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 import { getCurrentWindow, getAllWindows } from '@tauri-apps/api/window';
-import type { DashboardData, DiffType, GitInfo, Settings, SetupStatus, TmuxPane } from '@/types';
+import type { DashboardData, DiffType, GitInfo, Settings, SetupStatus, TmuxPane, TmuxPaneSize } from '@/types';
 
 // Commands
 export const getDashboardData = () => invoke<DashboardData>('get_dashboard_data');
@@ -58,4 +58,6 @@ export const tmuxListPanes = () => invoke<TmuxPane[]>('tmux_list_panes');
 export const tmuxCapturePane = (paneId: string) => invoke<string>('tmux_capture_pane', { paneId });
 export const tmuxSendKeys = (paneId: string, keys: string) =>
   invoke('tmux_send_keys', { paneId, keys });
+export const tmuxGetPaneSize = (paneId: string) =>
+  invoke<TmuxPaneSize>('tmux_get_pane_size', { paneId });
 export const openTmuxViewer = (paneId: string) => invoke('open_tmux_viewer', { paneId });

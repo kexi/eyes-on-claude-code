@@ -1,9 +1,12 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { AnsiUp } from 'ansi_up';
-import { tmuxCapturePane, tmuxSendKeys } from '@/lib/tauri';
+import { tmuxCapturePane, tmuxSendKeys, tmuxGetPaneSize } from '@/lib/tauri';
 
 const POLLING_INTERVAL = 500;
+const CHAR_WIDTH = 8.4; // Approximate width of monospace character in px
+const WINDOW_HEIGHT = 800; // Fixed window height
+const WINDOW_PADDING = 40; // Extra padding for scrollbar, etc.
 
 interface TmuxViewerProps {
   paneId: string;
@@ -16,6 +19,7 @@ export const TmuxViewer = ({ paneId }: TmuxViewerProps) => {
   const [isFadedIn, setIsFadedIn] = useState(false);
   const [inputValue, setInputValue] = useState('');
   const [isComposing, setIsComposing] = useState(false);
+  const [paneColumns, setPaneColumns] = useState<number | null>(null);
   const contentRef = useRef<HTMLPreElement>(null);
   const prevContentRef = useRef<string>('');
   const inputRef = useRef<HTMLInputElement>(null);
@@ -178,6 +182,22 @@ export const TmuxViewer = ({ paneId }: TmuxViewerProps) => {
     };
   }, []);
 
+  // Get pane size and resize window width to match
+  useEffect(() => {
+    const resizeWindowToPane = async () => {
+      try {
+        const size = await tmuxGetPaneSize(paneId);
+        setPaneColumns(size.width);
+        const windowWidth = Math.round(size.width * CHAR_WIDTH + WINDOW_PADDING);
+        const win = getCurrentWindow();
+        await win.setSize({ type: 'Logical', width: windowWidth, height: WINDOW_HEIGHT });
+      } catch (err) {
+        console.error('Failed to resize window:', err);
+      }
+    };
+    resizeWindowToPane();
+  }, [paneId]);
+
   useEffect(() => {
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
@@ -233,7 +253,7 @@ export const TmuxViewer = ({ paneId }: TmuxViewerProps) => {
         ) : (
           <pre
             ref={contentRef}
-            className="ansi-content h-full overflow-y-auto overflow-x-hidden whitespace-pre-wrap break-all rounded bg-black/50 p-3 font-mono text-sm text-text-primary"
+            className="ansi-content h-full overflow-y-auto overflow-x-auto whitespace-pre rounded bg-black/50 p-3 font-mono text-sm text-text-primary"
             dangerouslySetInnerHTML={{ __html: htmlContent || '(empty)' }}
           />
         )}

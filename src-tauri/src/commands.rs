@@ -5,7 +5,7 @@ use tauri::{Manager, WebviewUrl, WebviewWindowBuilder};
 use crate::constants::{MINI_VIEW_HEIGHT, MINI_VIEW_WIDTH, SETUP_MODAL_HEIGHT, SETUP_MODAL_WIDTH};
 use crate::difit::{start_difit_server, DiffType, DifitProcessRegistry};
 use crate::git::{get_git_info, GitInfo};
-use crate::tmux::{self, TmuxPane};
+use crate::tmux::{self, TmuxPane, TmuxPaneSize};
 use crate::persist::save_runtime_state;
 use crate::settings::save_settings;
 use crate::setup::{self, SetupStatus};
@@ -437,4 +437,9 @@ pub fn tmux_capture_pane(pane_id: String) -> Result<String, String> {
 #[tauri::command]
 pub fn tmux_send_keys(pane_id: String, keys: String) -> Result<(), String> {
     tmux::send_keys(&pane_id, &keys)
+}
+
+#[tauri::command]
+pub fn tmux_get_pane_size(pane_id: String) -> Result<TmuxPaneSize, String> {
+    tmux::get_pane_size(&pane_id)
 }

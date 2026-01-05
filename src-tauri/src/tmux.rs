@@ -11,6 +11,12 @@ pub struct TmuxPane {
     pub is_active: bool,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TmuxPaneSize {
+    pub width: u32,
+    pub height: u32,
+}
+
 fn validate_pane_id(pane_id: &str) -> Result<(), String> {
     // tmux pane ID format: %[0-9]+
     if pane_id.starts_with('%') && !pane_id[1..].is_empty() && pane_id[1..].chars().all(|c| c.is_ascii_digit()) {
@@ -84,4 +90,27 @@ pub fn send_keys(pane_id: &str, keys: &str) -> Result<(), String> {
     log::info!(target: "eocc.tmux", "send_keys result: {:?}", result);
     result?;
     Ok(())
+}
+
+pub fn get_pane_size(pane_id: &str) -> Result<TmuxPaneSize, String> {
+    validate_pane_id(pane_id)?;
+    let output = run_tmux_command(&[
+        "display-message",
+        "-p",
+        "-t",
+        pane_id,
+        "#{pane_width}x#{pane_height}",
+    ])?;
+    let trimmed = output.trim();
+    let parts: Vec<&str> = trimmed.split('x').collect();
+    if parts.len() != 2 {
+        return Err(format!("Invalid pane size format: {}", trimmed));
+    }
+    let width = parts[0]
+        .parse()
+        .map_err(|_| format!("Invalid width: {}", parts[0]))?;
+    let height = parts[1]
+        .parse()
+        .map_err(|_| format!("Invalid height: {}", parts[1]))?;
+    Ok(TmuxPaneSize { width, height })
 }

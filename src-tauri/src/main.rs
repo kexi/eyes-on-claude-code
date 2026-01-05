@@ -30,8 +30,8 @@ use commands::{
     check_claude_settings, clear_all_sessions, get_always_on_top, get_dashboard_data,
     get_repo_git_info, get_settings, get_setup_status, install_hook, open_claude_settings,
     open_diff, open_tmux_viewer, remove_session, set_always_on_top, set_opacity_active,
-    set_opacity_inactive, set_window_size_for_setup, tmux_capture_pane, tmux_is_available,
-    tmux_list_panes, tmux_send_keys,
+    set_opacity_inactive, set_window_size_for_setup, tmux_capture_pane, tmux_get_pane_size,
+    tmux_is_available, tmux_list_panes, tmux_send_keys,
 };
 use constants::{ICON_NORMAL, MINI_VIEW_HEIGHT, MINI_VIEW_WIDTH};
 use events::drain_events_queue;
@@ -175,6 +175,7 @@ fn main() {
             tmux_list_panes,
             tmux_capture_pane,
             tmux_send_keys,
+            tmux_get_pane_size,
             open_tmux_viewer
         ])
         .setup(move |app| {

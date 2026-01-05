@@ -71,6 +71,12 @@ export interface TmuxPane {
   is_active: boolean;
 }
 
+// Tmux pane size (columns x rows)
+export interface TmuxPaneSize {
+  width: number;
+  height: number;
+}
+
 // Status of each individual hook type
 export interface HookStatus {
   session_start: boolean;

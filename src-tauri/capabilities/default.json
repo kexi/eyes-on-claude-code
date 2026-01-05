@@ -9,6 +9,7 @@
     "core:window:allow-start-dragging",
     "core:window:allow-is-focused",
     "core:window:allow-close",
+    "core:window:allow-set-size",
     "core:event:default",
     "shell:allow-open"
   ]
