@@ -6,6 +6,7 @@ import { useWindowDrag } from '@/hooks/useWindowDrag';
 import { Header } from '@/components/Header';
 import { SessionList } from '@/components/SessionList';
 import { SetupModal } from '@/components/SetupModal';
+import { TmuxPanel } from '@/components/TmuxPanel';
 import {
   onWindowFocus,
   bringDiffWindowsToFront,
@@ -15,8 +16,11 @@ import {
 import { allHooksConfigured } from '@/lib/utils';
 import type { SetupStatus } from '@/types';
 
+type TabType = 'sessions' | 'tmux';
+
 const Dashboard = () => {
   const { dashboardData, settings, isLoading, refreshData } = useAppContext();
+  const [activeTab, setActiveTab] = useState<TabType>('sessions');
 
   // Always apply mini-view class to body
   useEffect(() => {
@@ -54,7 +58,37 @@ const Dashboard = () => {
   return (
     <div className="container bg-bg-primary h-screen rounded-xl max-w-[900px] mx-auto flex flex-col p-2.5">
       <Header sessions={dashboardData.sessions} onRefresh={refreshData} />
-      <SessionList sessions={dashboardData.sessions} />
+
+      {/* Tab navigation */}
+      <div className="flex gap-1 mb-2 border-b border-white/10 pb-1">
+        <button
+          onClick={() => setActiveTab('sessions')}
+          className={`px-3 py-1 text-sm rounded-t ${
+            activeTab === 'sessions'
+              ? 'bg-bg-card text-text-primary'
+              : 'text-text-secondary hover:text-text-primary'
+          }`}
+        >
+          Sessions
+        </button>
+        <button
+          onClick={() => setActiveTab('tmux')}
+          className={`px-3 py-1 text-sm rounded-t ${
+            activeTab === 'tmux'
+              ? 'bg-bg-card text-text-primary'
+              : 'text-text-secondary hover:text-text-primary'
+          }`}
+        >
+          tmux
+        </button>
+      </div>
+
+      {/* Tab content */}
+      {activeTab === 'sessions' ? (
+        <SessionList sessions={dashboardData.sessions} />
+      ) : (
+        <TmuxPanel />
+      )}
     </div>
   );
 };

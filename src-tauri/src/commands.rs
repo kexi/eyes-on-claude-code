@@ -5,6 +5,7 @@ use tauri::{Manager, WebviewUrl, WebviewWindowBuilder};
 use crate::constants::{MINI_VIEW_HEIGHT, MINI_VIEW_WIDTH, SETUP_MODAL_HEIGHT, SETUP_MODAL_WIDTH};
 use crate::difit::{start_difit_server, DiffType, DifitProcessRegistry};
 use crate::git::{get_git_info, GitInfo};
+use crate::tmux::{self, TmuxPane};
 use crate::persist::save_runtime_state;
 use crate::settings::save_settings;
 use crate::setup::{self, SetupStatus};
@@ -382,4 +383,28 @@ pub fn open_claude_settings() -> Result<(), String> {
     }
 
     Ok(())
+}
+
+// ============================================================================
+// Tmux commands
+// ============================================================================
+
+#[tauri::command]
+pub fn tmux_is_available() -> bool {
+    tmux::is_tmux_available()
+}
+
+#[tauri::command]
+pub fn tmux_list_panes() -> Result<Vec<TmuxPane>, String> {
+    tmux::list_panes()
+}
+
+#[tauri::command]
+pub fn tmux_capture_pane(pane_id: String) -> Result<String, String> {
+    tmux::capture_pane(&pane_id)
+}
+
+#[tauri::command]
+pub fn tmux_send_keys(pane_id: String, keys: String) -> Result<(), String> {
+    tmux::send_keys(&pane_id, &keys)
 }

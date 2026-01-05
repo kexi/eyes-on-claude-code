@@ -59,6 +59,16 @@ export interface GitInfo {
 // Diff type for difit integration
 export type DiffType = 'unstaged' | 'staged' | 'commit' | 'branch';
 
+// Tmux pane information
+export interface TmuxPane {
+  session_name: string;
+  window_index: number;
+  window_name: string;
+  pane_index: number;
+  pane_id: string;
+  is_active: boolean;
+}
+
 // Status of each individual hook type
 export interface HookStatus {
   session_start: boolean;

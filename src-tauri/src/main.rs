@@ -10,6 +10,7 @@ mod persist;
 mod settings;
 mod setup;
 mod state;
+mod tmux;
 mod tray;
 
 use notify::{Config, RecommendedWatcher, RecursiveMode, Watcher};
@@ -29,7 +30,8 @@ use commands::{
     check_claude_settings, clear_all_sessions, get_always_on_top, get_dashboard_data,
     get_repo_git_info, get_settings, get_setup_status, install_hook, open_claude_settings,
     open_diff, remove_session, set_always_on_top, set_opacity_active, set_opacity_inactive,
-    set_window_size_for_setup,
+    set_window_size_for_setup, tmux_capture_pane, tmux_is_available, tmux_list_panes,
+    tmux_send_keys,
 };
 use constants::{ICON_NORMAL, MINI_VIEW_HEIGHT, MINI_VIEW_WIDTH};
 use events::drain_events_queue;
@@ -167,7 +169,12 @@ fn main() {
             get_setup_status,
             install_hook,
             check_claude_settings,
-            open_claude_settings
+            open_claude_settings,
+            // Tmux commands
+            tmux_is_available,
+            tmux_list_panes,
+            tmux_capture_pane,
+            tmux_send_keys
         ])
         .setup(move |app| {
             let app_handle = app.handle().clone();
