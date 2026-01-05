@@ -211,11 +211,11 @@ export const SessionCard = ({ session }: SessionCardProps) => {
 
               {/* Branch */}
               <div className="flex items-center justify-between py-0.5">
-                <div className="flex items-center gap-1">
-                  <span className="text-text-secondary text-[0.625rem]">branch:</span>
+                <div className="flex items-center gap-1 min-w-0">
+                  <span className="text-text-secondary text-[0.625rem] shrink-0">branch:</span>
                   <span className="text-success text-[0.625rem] truncate">{gitInfo.branch}</span>
                 </div>
-                <DiffButton onClick={() => handleDiffClick('branch')} small />
+                <DiffButton onClick={() => handleDiffClick('branch')} small className="shrink-0" />
               </div>
 
               {/* Refresh button */}
