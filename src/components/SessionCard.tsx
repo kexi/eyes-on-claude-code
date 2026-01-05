@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import type { SessionInfo, GitInfo } from '@/types';
 import { getStatusEmoji, getStatusClass, formatRelativeTime } from '@/lib/utils';
 import { removeSession, getRepoGitInfo, openDiff, openTmuxViewer, type DiffType } from '@/lib/tauri';
-import { ChevronDownIcon, RefreshIcon } from './icons';
+import { ChevronDownIcon } from './icons';
 import { DiffButton } from './DiffButton';
 
 const FOCUS_REFRESH_MIN_INTERVAL = 5000;
@@ -230,17 +230,6 @@ export const SessionCard = ({ session }: SessionCardProps) => {
                 <DiffButton onClick={() => handleDiffClick('branch')} small className="shrink-0" />
               </div>
 
-              {/* Refresh button */}
-              <div className="pt-1">
-                <button
-                  onClick={fetchGitInfo}
-                  disabled={isLoadingGit}
-                  className="flex items-center gap-1 text-[0.625rem] text-text-secondary hover:text-white transition-colors disabled:opacity-50"
-                >
-                  <RefreshIcon className={`w-3 h-3 ${isLoadingGit ? 'animate-spin' : ''}`} />
-                  Refresh
-                </button>
-              </div>
             </>
           ) : (
             <div className="text-text-secondary text-[0.625rem]">Not a git repository</div>
