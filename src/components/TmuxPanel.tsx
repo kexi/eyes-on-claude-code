@@ -1,7 +1,9 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import type { TmuxPane } from '@/types';
 import { tmuxIsAvailable, tmuxListPanes, tmuxCapturePane, tmuxSendKeys } from '@/lib/tauri';
 import { RefreshIcon } from './icons';
+
+const POLLING_INTERVAL = 1000;
 
 interface TmuxTreeNode {
   session: string;
@@ -42,6 +44,13 @@ export const TmuxPanel = () => {
   const [paneContent, setPaneContent] = useState<string>('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [isPolling, setIsPolling] = useState(true);
+  const selectedPaneRef = useRef<TmuxPane | null>(null);
+
+  // Keep ref in sync with state for use in polling
+  useEffect(() => {
+    selectedPaneRef.current = selectedPane;
+  }, [selectedPane]);
 
   const checkAvailability = useCallback(async () => {
     try {
@@ -105,6 +114,39 @@ export const TmuxPanel = () => {
       return () => clearTimeout(timer);
     }
   }, [error]);
+
+  // Polling for pane content updates
+  useEffect(() => {
+    if (!isPolling || !selectedPane) return;
+
+    const intervalId = setInterval(async () => {
+      const pane = selectedPaneRef.current;
+      if (!pane) return;
+
+      try {
+        const content = await tmuxCapturePane(pane.pane_id);
+        setPaneContent(content);
+      } catch {
+        // Silently ignore polling errors
+      }
+    }, POLLING_INTERVAL);
+
+    return () => clearInterval(intervalId);
+  }, [isPolling, selectedPane]);
+
+  // Stop polling when window loses focus, resume when it gains focus
+  useEffect(() => {
+    const handleFocus = () => setIsPolling(true);
+    const handleBlur = () => setIsPolling(false);
+
+    window.addEventListener('focus', handleFocus);
+    window.addEventListener('blur', handleBlur);
+
+    return () => {
+      window.removeEventListener('focus', handleFocus);
+      window.removeEventListener('blur', handleBlur);
+    };
+  }, []);
 
   if (isAvailable === null) {
     return (
