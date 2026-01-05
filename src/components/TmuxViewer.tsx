@@ -234,15 +234,13 @@ export const TmuxViewer = ({ paneId }: TmuxViewerProps) => {
       )}
 
       {/* Close button */}
-      <div className="absolute bottom-2 right-2">
-        <button
-          type="button"
-          onClick={handleClose}
-          className="rounded bg-bg-card px-3 py-1 text-xs text-text-secondary hover:bg-white/20 hover:text-text-primary transition-colors"
-        >
-          Close
-        </button>
-      </div>
+      <button
+        type="button"
+        onClick={handleClose}
+        className="absolute bottom-4 left-1/2 -translate-x-1/2 rounded-lg bg-bg-card px-8 py-2 text-base text-text-secondary hover:bg-white/20 hover:text-text-primary transition-colors"
+      >
+        Close
+      </button>
 
       {/* Hidden input for IME */}
       <input
