@@ -1,6 +1,7 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { getCurrentWindow } from '@tauri-apps/api/window';
-import { tmuxCapturePane } from '@/lib/tauri';
+import { AnsiUp } from 'ansi_up';
+import { tmuxCapturePane, tmuxSendKeys } from '@/lib/tauri';
 
 const POLLING_INTERVAL = 500;
 
@@ -15,6 +16,16 @@ export const TmuxViewer = ({ paneId }: TmuxViewerProps) => {
   const [isFadedIn, setIsFadedIn] = useState(false);
   const contentRef = useRef<HTMLPreElement>(null);
   const prevContentRef = useRef<string>('');
+
+  const ansiUp = useMemo(() => {
+    const instance = new AnsiUp();
+    instance.use_classes = true;
+    return instance;
+  }, []);
+
+  const htmlContent = useMemo(() => {
+    return ansiUp.ansi_to_html(content);
+  }, [ansiUp, content]);
 
   const loadContent = useCallback(async () => {
     try {
@@ -38,6 +49,79 @@ export const TmuxViewer = ({ paneId }: TmuxViewerProps) => {
       console.error('Failed to close window:', err);
     }
   };
+
+  const convertKeyToTmux = (e: KeyboardEvent): string | null => {
+    // Ignore modifier-only keys
+    if (['Control', 'Alt', 'Shift', 'Meta'].includes(e.key)) {
+      return null;
+    }
+
+    // Handle Ctrl+key combinations
+    if (e.ctrlKey && e.key.length === 1) {
+      return `C-${e.key.toLowerCase()}`;
+    }
+
+    // Handle special keys
+    const keyMap: Record<string, string> = {
+      Enter: 'Enter',
+      Escape: 'Escape',
+      Backspace: 'BSpace',
+      Tab: 'Tab',
+      ArrowUp: 'Up',
+      ArrowDown: 'Down',
+      ArrowLeft: 'Left',
+      ArrowRight: 'Right',
+      Home: 'Home',
+      End: 'End',
+      PageUp: 'PageUp',
+      PageDown: 'PageDown',
+      Delete: 'DC',
+      Insert: 'IC',
+      F1: 'F1',
+      F2: 'F2',
+      F3: 'F3',
+      F4: 'F4',
+      F5: 'F5',
+      F6: 'F6',
+      F7: 'F7',
+      F8: 'F8',
+      F9: 'F9',
+      F10: 'F10',
+      F11: 'F11',
+      F12: 'F12',
+    };
+
+    if (keyMap[e.key]) {
+      return keyMap[e.key];
+    }
+
+    // Regular character
+    if (e.key.length === 1) {
+      return e.key;
+    }
+
+    return null;
+  };
+
+  const handleKeyDown = useCallback(
+    async (e: KeyboardEvent) => {
+      const tmuxKey = convertKeyToTmux(e);
+      if (tmuxKey) {
+        e.preventDefault();
+        try {
+          await tmuxSendKeys(paneId, tmuxKey);
+        } catch (err) {
+          console.error('Failed to send key:', err);
+        }
+      }
+    },
+    [paneId]
+  );
+
+  useEffect(() => {
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [handleKeyDown]);
 
   useEffect(() => {
     loadContent();
@@ -74,10 +158,9 @@ export const TmuxViewer = ({ paneId }: TmuxViewerProps) => {
         ) : (
           <pre
             ref={contentRef}
-            className="h-full overflow-y-auto overflow-x-hidden whitespace-pre-wrap break-all rounded bg-black/50 p-3 font-mono text-sm text-text-primary"
-          >
-            {content || '(empty)'}
-          </pre>
+            className="ansi-content h-full overflow-y-auto overflow-x-hidden whitespace-pre-wrap break-all rounded bg-black/50 p-3 font-mono text-sm text-text-primary"
+            dangerouslySetInnerHTML={{ __html: htmlContent || '(empty)' }}
+          />
         )}
       </div>
 
