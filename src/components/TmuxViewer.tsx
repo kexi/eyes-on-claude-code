@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { getCurrentWindow } from '@tauri-apps/api/window';
 import { tmuxCapturePane } from '@/lib/tauri';
 
 const POLLING_INTERVAL = 500;
@@ -30,6 +31,14 @@ export const TmuxViewer = ({ paneId }: TmuxViewerProps) => {
     }
   }, [paneId]);
 
+  const handleClose = async () => {
+    try {
+      await getCurrentWindow().close();
+    } catch (err) {
+      console.error('Failed to close window:', err);
+    }
+  };
+
   useEffect(() => {
     loadContent();
     const timer = setTimeout(() => setIsFadedIn(true), 50);
@@ -49,7 +58,7 @@ export const TmuxViewer = ({ paneId }: TmuxViewerProps) => {
 
   return (
     <div
-      className={`flex h-screen flex-col bg-bg-primary transition-opacity duration-300 ${
+      className={`relative flex h-screen flex-col bg-bg-primary transition-opacity duration-300 ${
         isFadedIn ? 'opacity-100' : 'opacity-0'
       }`}
     >
@@ -71,6 +80,13 @@ export const TmuxViewer = ({ paneId }: TmuxViewerProps) => {
           </pre>
         )}
       </div>
+
+      <button
+        onClick={handleClose}
+        className="absolute bottom-4 left-1/2 -translate-x-1/2 rounded-lg bg-bg-card px-8 py-2 text-base text-text-secondary hover:bg-white/20 hover:text-text-primary transition-colors"
+      >
+        Close
+      </button>
     </div>
   );
 };

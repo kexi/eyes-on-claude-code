@@ -411,6 +411,8 @@ pub fn open_tmux_viewer(pane_id: String, app: tauri::AppHandle) -> Result<(), St
         .title(format!("tmux - {}", pane_id))
         .inner_size(800.0, 600.0)
         .center()
+        .transparent(true)
+        .decorations(true)
         .build()
         .map_err(|e| format!("Failed to create tmux viewer window: {}", e))?;
 
