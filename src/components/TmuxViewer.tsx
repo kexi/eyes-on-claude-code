@@ -14,8 +14,13 @@ export const TmuxViewer = ({ paneId }: TmuxViewerProps) => {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isFadedIn, setIsFadedIn] = useState(false);
+  const [inputValue, setInputValue] = useState('');
+  const [isComposing, setIsComposing] = useState(false);
   const contentRef = useRef<HTMLPreElement>(null);
   const prevContentRef = useRef<string>('');
+  const inputRef = useRef<HTMLInputElement>(null);
+  const isComposingRef = useRef(false);
+  const justComposedRef = useRef(false);
 
   const ansiUp = useMemo(() => {
     const instance = new AnsiUp();
@@ -105,6 +110,11 @@ export const TmuxViewer = ({ paneId }: TmuxViewerProps) => {
 
   const handleKeyDown = useCallback(
     async (e: KeyboardEvent) => {
+      // Ignore during IME composition or right after composition end
+      if (isComposingRef.current || e.isComposing || justComposedRef.current) {
+        return;
+      }
+
       const tmuxKey = convertKeyToTmux(e);
       if (tmuxKey) {
         e.preventDefault();
@@ -118,10 +128,52 @@ export const TmuxViewer = ({ paneId }: TmuxViewerProps) => {
     [paneId]
   );
 
+  const handleCompositionStart = useCallback(() => {
+    isComposingRef.current = true;
+    setIsComposing(true);
+  }, []);
+
+  const handleCompositionEnd = useCallback(
+    async (e: React.CompositionEvent<HTMLInputElement>) => {
+      isComposingRef.current = false;
+      setIsComposing(false);
+      justComposedRef.current = true;
+
+      // Send the composed text to tmux as a single string
+      const text = e.data;
+      if (text) {
+        try {
+          await tmuxSendKeys(paneId, text);
+        } catch (err) {
+          console.error('Failed to send composed text:', err);
+        }
+      }
+
+      // Clear input
+      setInputValue('');
+
+      // Delay to prevent the Enter key from compositionend being processed by handleKeyDown.
+      // 100ms is sufficient to skip the keydown event that immediately follows compositionend.
+      setTimeout(() => {
+        justComposedRef.current = false;
+      }, 100);
+    },
+    [paneId]
+  );
+
   useEffect(() => {
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [handleKeyDown]);
+
+  // Refocus hidden input when window gains focus (for IME support)
+  useEffect(() => {
+    const handleWindowFocus = () => {
+      inputRef.current?.focus();
+    };
+    window.addEventListener('focus', handleWindowFocus);
+    return () => window.removeEventListener('focus', handleWindowFocus);
+  }, []);
 
   useEffect(() => {
     loadContent();
@@ -150,7 +202,7 @@ export const TmuxViewer = ({ paneId }: TmuxViewerProps) => {
         <div className="mx-2 mt-2 rounded bg-red-900/50 px-3 py-2 text-sm text-red-200">{error}</div>
       )}
 
-      <div className="flex-1 overflow-hidden p-2">
+      <div className="flex-1 overflow-hidden p-2 pb-16">
         {isLoading && !content ? (
           <div className="flex h-full items-center justify-center text-text-secondary">
             Loading...
@@ -164,12 +216,36 @@ export const TmuxViewer = ({ paneId }: TmuxViewerProps) => {
         )}
       </div>
 
-      <button
-        onClick={handleClose}
-        className="absolute bottom-4 left-1/2 -translate-x-1/2 rounded-lg bg-bg-card px-8 py-2 text-base text-text-secondary hover:bg-white/20 hover:text-text-primary transition-colors"
-      >
-        Close
-      </button>
+      {/* IME composition overlay - only shown during composition */}
+      {isComposing && inputValue && (
+        <div className="absolute bottom-12 left-2 px-3 py-2 bg-cyan-900/90 text-cyan-200 text-sm font-mono rounded shadow-lg">
+          {inputValue}
+        </div>
+      )}
+
+      {/* Close button */}
+      <div className="absolute bottom-2 right-2">
+        <button
+          type="button"
+          onClick={handleClose}
+          className="rounded bg-bg-card px-3 py-1 text-xs text-text-secondary hover:bg-white/20 hover:text-text-primary transition-colors"
+        >
+          Close
+        </button>
+      </div>
+
+      {/* Hidden input for IME */}
+      <input
+        ref={inputRef}
+        type="text"
+        value={inputValue}
+        onChange={(e) => setInputValue(e.target.value)}
+        onCompositionStart={handleCompositionStart}
+        onCompositionEnd={handleCompositionEnd}
+        className="absolute opacity-0 pointer-events-none"
+        style={{ left: '-9999px' }}
+        autoFocus
+      />
     </div>
   );
 };
