@@ -20,6 +20,7 @@ export interface SessionInfo {
   status: SessionStatus;
   last_event: string;
   waiting_for: string;
+  tmux_pane: string;
 }
 
 export interface EventInfo {
@@ -32,6 +33,7 @@ export interface EventInfo {
   message: string;
   notification_type: NotificationType;
   tool_name: string;
+  tmux_pane: string;
 }
 
 export interface DashboardData {

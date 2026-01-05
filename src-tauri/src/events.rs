@@ -22,11 +22,12 @@ pub fn process_event(state: &mut AppState, event: EventInfo) {
             state.sessions.insert(
                 key,
                 SessionInfo {
-                    project_name: event.project_name,
-                    project_dir: event.project_dir,
+                    project_name: event.project_name.clone(),
+                    project_dir: event.project_dir.clone(),
                     status: SessionStatus::Active,
-                    last_event: event.timestamp,
+                    last_event: event.timestamp.clone(),
                     waiting_for: String::new(),
+                    tmux_pane: event.tmux_pane,
                 },
             );
         }

@@ -65,6 +65,7 @@ async function main() {
 
   const projectDir = process.env.CLAUDE_PROJECT_DIR || "unknown";
   const projectName = basename(projectDir) || "unknown";
+  const tmuxPane = process.env.TMUX_PANE || "";
 
   const sessionId = getString(rawInput, "session_id", "unknown");
   const message = getString(rawInput, "message", "");
@@ -88,6 +89,7 @@ async function main() {
     message,
     notification_type: notificationType,
     tool_name: toolName,
+    tmux_pane: tmuxPane,
   };
 
   const payloadJson = JSON.stringify(payload);
