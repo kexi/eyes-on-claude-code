@@ -8,7 +8,7 @@ interface SessionListProps {
 
 export const SessionList = ({ sessions }: SessionListProps) => {
   return (
-    <div className="flex-1 overflow-y-auto min-h-0">
+    <div className="flex-1 overflow-y-scroll min-h-0">
       <div className="flex flex-col gap-2">
         {sessions.length === 0 ? (
           <EmptyState icon="📭" message="No active sessions" />
