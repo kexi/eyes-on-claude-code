@@ -52,9 +52,9 @@ const Dashboard = () => {
   }
 
   return (
-    <div className="container bg-bg-primary h-screen rounded-xl max-w-[900px] mx-auto overflow-y-auto p-2.5">
-      <Header sessions={dashboardData.sessions} />
-      <SessionList sessions={dashboardData.sessions} onRefresh={refreshData} />
+    <div className="container bg-bg-primary h-screen rounded-xl max-w-[900px] mx-auto flex flex-col p-2.5">
+      <Header sessions={dashboardData.sessions} onRefresh={refreshData} />
+      <SessionList sessions={dashboardData.sessions} />
     </div>
   );
 };

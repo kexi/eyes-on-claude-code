@@ -2,9 +2,10 @@ import type { SessionInfo } from '@/types';
 
 interface HeaderProps {
   sessions: SessionInfo[];
+  onRefresh: () => void;
 }
 
-export const Header = ({ sessions }: HeaderProps) => {
+export const Header = ({ sessions, onRefresh }: HeaderProps) => {
   const waitingCount = sessions.filter(
     (s) => s.status === 'WaitingPermission' || s.status === 'WaitingInput'
   ).length;
@@ -12,15 +13,26 @@ export const Header = ({ sessions }: HeaderProps) => {
   const isWaiting = waitingCount > 0;
 
   return (
-    <header className="flex justify-between items-center border-b border-bg-card py-1.5 mb-2.5 flex-nowrap">
-      <div className="flex items-center gap-3">
-        <h1 className="font-semibold text-sm whitespace-nowrap">Eyes on Claude Code</h1>
+    <header className="flex flex-col gap-1.5 pb-1.5 shrink-0">
+      <div className="flex justify-between items-center border-b border-bg-card py-1.5 flex-nowrap">
+        <div className="flex items-center gap-3">
+          <h1 className="font-semibold text-sm whitespace-nowrap">Eyes on Claude Code</h1>
+        </div>
+        <div className="flex items-center gap-2 bg-bg-card rounded-full py-0.5 px-2 text-[0.625rem] whitespace-nowrap shrink-0">
+          <div
+            className={`w-2 h-2 rounded-full bg-success ${isWaiting ? 'bg-warning animate-pulse-slow' : ''}`}
+          />
+          <span>{isWaiting ? `${waitingCount} waiting` : 'Monitoring'}</span>
+        </div>
       </div>
-      <div className="flex items-center gap-2 bg-bg-card rounded-full py-0.5 px-2 text-[0.625rem] whitespace-nowrap shrink-0">
-        <div
-          className={`w-2 h-2 rounded-full bg-success ${isWaiting ? 'bg-warning animate-pulse-slow' : ''}`}
-        />
-        <span>{isWaiting ? `${waitingCount} waiting` : 'Monitoring'}</span>
+      <div className="flex justify-between items-center">
+        <h2 className="font-semibold text-xs">Sessions</h2>
+        <button
+          onClick={onRefresh}
+          className="bg-bg-card border-none text-text-primary rounded-lg cursor-pointer transition-colors hover:bg-accent py-0.5 px-2 text-[0.625rem]"
+        >
+          Refresh
+        </button>
       </div>
     </header>
   );
