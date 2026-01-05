@@ -4,9 +4,12 @@ import { AnsiUp } from 'ansi_up';
 import { tmuxCapturePane, tmuxSendKeys, tmuxGetPaneSize } from '@/lib/tauri';
 
 const POLLING_INTERVAL = 500;
-const CHAR_WIDTH = 8.4; // Approximate width of monospace character in px
-const WINDOW_HEIGHT = 800; // Fixed window height
-const WINDOW_PADDING = 40; // Extra padding for scrollbar, etc.
+// Approximate width of monospace character at text-sm (14px) with font-mono
+const CHAR_WIDTH = 8.4;
+const WINDOW_HEIGHT = 800;
+const WINDOW_PADDING = 40;
+const MIN_WINDOW_WIDTH = 400;
+const MAX_WINDOW_WIDTH = 1600;
 
 interface TmuxViewerProps {
   paneId: string;
@@ -19,7 +22,6 @@ export const TmuxViewer = ({ paneId }: TmuxViewerProps) => {
   const [isFadedIn, setIsFadedIn] = useState(false);
   const [inputValue, setInputValue] = useState('');
   const [isComposing, setIsComposing] = useState(false);
-  const [paneColumns, setPaneColumns] = useState<number | null>(null);
   const contentRef = useRef<HTMLPreElement>(null);
   const prevContentRef = useRef<string>('');
   const inputRef = useRef<HTMLInputElement>(null);
@@ -187,8 +189,8 @@ export const TmuxViewer = ({ paneId }: TmuxViewerProps) => {
     const resizeWindowToPane = async () => {
       try {
         const size = await tmuxGetPaneSize(paneId);
-        setPaneColumns(size.width);
-        const windowWidth = Math.round(size.width * CHAR_WIDTH + WINDOW_PADDING);
+        const calculatedWidth = Math.round(size.width * CHAR_WIDTH + WINDOW_PADDING);
+        const windowWidth = Math.min(MAX_WINDOW_WIDTH, Math.max(MIN_WINDOW_WIDTH, calculatedWidth));
         const win = getCurrentWindow();
         await win.setSize({ type: 'Logical', width: windowWidth, height: WINDOW_HEIGHT });
       } catch (err) {
