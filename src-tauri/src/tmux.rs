@@ -11,6 +11,15 @@ pub struct TmuxPane {
     pub is_active: bool,
 }
 
+fn validate_pane_id(pane_id: &str) -> Result<(), String> {
+    // tmux pane ID format: %[0-9]+
+    if pane_id.starts_with('%') && !pane_id[1..].is_empty() && pane_id[1..].chars().all(|c| c.is_ascii_digit()) {
+        Ok(())
+    } else {
+        Err(format!("Invalid pane ID format: {}", pane_id))
+    }
+}
+
 fn run_tmux_command(args: &[&str]) -> Result<String, String> {
     let output = Command::new("tmux")
         .args(args)
@@ -60,6 +69,7 @@ pub fn list_panes() -> Result<Vec<TmuxPane>, String> {
 }
 
 pub fn capture_pane(pane_id: &str) -> Result<String, String> {
+    validate_pane_id(pane_id)?;
     // -p: output to stdout
     // -e: include escape sequences for colors
     // -S -: start from the beginning of history
@@ -68,6 +78,7 @@ pub fn capture_pane(pane_id: &str) -> Result<String, String> {
 }
 
 pub fn send_keys(pane_id: &str, keys: &str) -> Result<(), String> {
+    validate_pane_id(pane_id)?;
     log::info!(target: "eocc.tmux", "send_keys: pane_id={}, keys={}", pane_id, keys);
     let result = run_tmux_command(&["send-keys", "-t", pane_id, keys]);
     log::info!(target: "eocc.tmux", "send_keys result: {:?}", result);

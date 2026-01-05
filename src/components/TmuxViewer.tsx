@@ -21,6 +21,7 @@ export const TmuxViewer = ({ paneId }: TmuxViewerProps) => {
   const inputRef = useRef<HTMLInputElement>(null);
   const isComposingRef = useRef(false);
   const justComposedRef = useRef(false);
+  const isMountedRef = useRef(true);
 
   const ansiUp = useMemo(() => {
     const instance = new AnsiUp();
@@ -33,17 +34,22 @@ export const TmuxViewer = ({ paneId }: TmuxViewerProps) => {
   }, [ansiUp, content]);
 
   const loadContent = useCallback(async () => {
+    if (!isMountedRef.current) return;
     try {
       const newContent = await tmuxCapturePane(paneId);
+      if (!isMountedRef.current) return;
       if (newContent !== prevContentRef.current) {
         setContent(newContent);
         prevContentRef.current = newContent;
       }
       setError(null);
     } catch (err) {
+      if (!isMountedRef.current) return;
       setError(err instanceof Error ? err.message : String(err));
     } finally {
-      setIsLoading(false);
+      if (isMountedRef.current) {
+        setIsLoading(false);
+      }
     }
   }, [paneId]);
 
@@ -121,7 +127,7 @@ export const TmuxViewer = ({ paneId }: TmuxViewerProps) => {
         try {
           await tmuxSendKeys(paneId, tmuxKey);
           // Refresh immediately after sending key for responsive feedback
-          loadContent();
+          loadContent().catch(console.error);
         } catch (err) {
           console.error('Failed to send key:', err);
         }
@@ -147,7 +153,7 @@ export const TmuxViewer = ({ paneId }: TmuxViewerProps) => {
         try {
           await tmuxSendKeys(paneId, text);
           // Refresh immediately after sending composed text
-          loadContent();
+          loadContent().catch(console.error);
         } catch (err) {
           console.error('Failed to send composed text:', err);
         }
@@ -164,6 +170,13 @@ export const TmuxViewer = ({ paneId }: TmuxViewerProps) => {
     },
     [paneId, loadContent]
   );
+
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
 
   useEffect(() => {
     window.addEventListener('keydown', handleKeyDown);
