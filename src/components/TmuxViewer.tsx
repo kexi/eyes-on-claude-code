@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { getCurrentWindow } from '@tauri-apps/api/window';
+import { getCurrentWindow, LogicalSize } from '@tauri-apps/api/window';
 import { AnsiUp } from 'ansi_up';
 import { tmuxCapturePane, tmuxSendKeys, tmuxGetPaneSize } from '@/lib/tauri';
 
@@ -192,7 +192,7 @@ export const TmuxViewer = ({ paneId }: TmuxViewerProps) => {
         const calculatedWidth = Math.round(size.width * CHAR_WIDTH + WINDOW_PADDING);
         const windowWidth = Math.min(MAX_WINDOW_WIDTH, Math.max(MIN_WINDOW_WIDTH, calculatedWidth));
         const win = getCurrentWindow();
-        await win.setSize({ type: 'Logical', width: windowWidth, height: WINDOW_HEIGHT });
+        await win.setSize(new LogicalSize(windowWidth, WINDOW_HEIGHT));
       } catch (err) {
         console.error('Failed to resize window:', err);
       }
