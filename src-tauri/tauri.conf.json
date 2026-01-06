@@ -27,7 +27,7 @@
     "macOS": {
       "minimumSystemVersion": "12.0",
       "signingIdentity": "-",
-      "hardcodedRuntimeEntitlements": ["allow-dyld-environment-variables"]
+      "hardenedRuntime": true
     }
   },
   "plugins": {
