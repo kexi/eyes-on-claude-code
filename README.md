@@ -106,8 +106,22 @@ Click Diff to launch [difit](https://github.com/yoshiko-pg/difit) and review the
 - `branch`: comparison against the default branch (auto-detected)
 
 > [!NOTE]
-> Diff display internally runs `npx difit` inside the target repository, so Node.js (`npx`) is required.  
+> Diff display internally runs `npx difit` inside the target repository, so Node.js (`npx`) is required.
 > If the target is not a Git repository, or if there is no diff, it cannot be opened.
+
+#### tmux Integration
+
+If Claude Code is running inside a tmux pane, the session card displays a **Terminal** button that opens a viewer window showing the pane contents in real-time.
+
+![tmux](https://github.com/user-attachments/assets/68dfcac3-2e5b-4ec0-8236-89824be7ce16)
+
+- **Real-time updates**: Pane content refreshes every 500ms
+- **Keyboard input**: Send keystrokes (including Ctrl combinations and special keys) directly to the pane
+- **IME support**: Japanese input method composition is supported
+- **ANSI colors**: Terminal colors are rendered correctly
+
+> [!NOTE]
+> tmux integration requires Claude Code to be running inside a tmux session. The `TMUX_PANE` environment variable is automatically captured by the hook script.
 
 ### Window operations / settings
 
@@ -134,6 +148,7 @@ Click Diff to launch [difit](https://github.com/yoshiko-pg/difit) and review the
 - Visualize the number of waiting sessions
 - Show Git info: branch name, unstaged/staged presence, latest commit
 - Diff view: open diffs in a separate window via difit (`npx difit`)
+- tmux integration: view and interact with tmux pane contents in real-time
 - Notification sounds: notify waiting / completed with sounds (Sound ON/OFF available)
 
 ## 4. Information for development
@@ -328,6 +343,20 @@ xattr -cr "/Volumes/Eyes on Claude Code/Eyes on Claude Code.app"
 
 - Confirm Sound is ON in the menu
 - Audio may be blocked by browser/OS restrictions (after changing settings, trigger another state change and test again)
+
+### tmux Terminal button not showing
+
+- Confirm Claude Code is running inside a tmux session
+  - `echo $TMUX_PANE` should show the pane ID (e.g., `%0`)
+- Check if the hook is capturing the TMUX_PANE variable
+  - Look for `tmux_pane` in event logs: `grep tmux_pane ~/.eocc/logs/events.jsonl`
+
+### tmux viewer not working
+
+- Confirm tmux is installed and accessible
+  - `command -v tmux`
+- Confirm the pane still exists
+  - `tmux list-panes -a`
 
 ## 6. License
 

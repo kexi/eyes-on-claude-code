@@ -108,8 +108,22 @@ Diffをクリックすると [difit](https://github.com/yoshiko-pg/difit) を起
 - `branch`: デフォルトブランチ（自動検出）との比較
 
 > [!NOTE]
-> Diff表示は内部で `npx difit` を対象リポジトリ内で起動します。そのためNode.js（`npx`）が必要です。  
+> Diff表示は内部で `npx difit` を対象リポジトリ内で起動します。そのためNode.js（`npx`）が必要です。
 > 対象がGitリポジトリでない場合、または差分が無い場合は開けません。
+
+#### tmux連携
+
+Claude Codeがtmuxペイン内で実行されている場合、セッションカードに**Terminal**ボタンが表示され、ペインの内容をリアルタイムで確認できるビューアウィンドウを開けます。
+
+![tmux](https://github.com/user-attachments/assets/68dfcac3-2e5b-4ec0-8236-89824be7ce16)
+
+- **リアルタイム更新**: ペインの内容を500msごとに更新
+- **キーボード入力**: Ctrl組み合わせや特殊キーを含むキー入力をペインに送信可能
+- **IMEサポート**: 日本語入力（IME）に対応
+- **ANSIカラー**: ターミナルカラーを正しくレンダリング
+
+> [!NOTE]
+> tmux連携にはClaude Codeがtmuxセッション内で実行されている必要があります。`TMUX_PANE`環境変数はhookスクリプトによって自動的に取得されます。
 
 ### ウィンドウ操作/設定
 
@@ -136,6 +150,7 @@ Diffをクリックすると [difit](https://github.com/yoshiko-pg/difit) を起
 - waiting数の可視化
 - Git情報の表示: ブランチ名、unstaged/staged有無、最新コミット
 - Diff表示: difit（`npx difit`）で差分を別ウィンドウに表示
+- tmux連携: tmuxペインの内容をリアルタイムで表示・操作
 - 通知音: waiting / completed を音で通知（SoundのON/OFFあり）
 
 ## 4. Information for development
@@ -330,6 +345,20 @@ xattr -cr "/Volumes/Eyes on Claude Code/Eyes on Claude Code.app"
 
 - メニューの Sound がONになっているか確認
 - ブラウザ/OS側の制限でAudioがブロックされる場合があります（設定変更後に再度状態変化を発生させて確認してください）
+
+### tmux Terminalボタンが表示されない
+
+- Claude Codeがtmuxセッション内で実行されているか確認
+  - `echo $TMUX_PANE` でペインID（例: `%0`）が表示されるはずです
+- hookが`TMUX_PANE`変数を取得しているか確認
+  - イベントログで確認: `grep tmux_pane ~/.eocc/logs/events.jsonl`
+
+### tmuxビューアが動作しない
+
+- tmuxがインストールされており、アクセス可能か確認
+  - `command -v tmux`
+- ペインがまだ存在するか確認
+  - `tmux list-panes -a`
 
 ## 6. ライセンス
 

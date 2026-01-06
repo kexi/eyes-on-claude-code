@@ -1,5 +1,45 @@
 use serde::{Deserialize, Serialize};
+use std::path::PathBuf;
 use std::process::Command;
+use std::sync::OnceLock;
+
+static TMUX_PATH: OnceLock<Option<PathBuf>> = OnceLock::new();
+
+fn get_tmux_path() -> Option<&'static PathBuf> {
+    TMUX_PATH
+        .get_or_init(|| {
+            let candidates = [
+                "/opt/homebrew/bin/tmux", // Apple Silicon
+                "/usr/local/bin/tmux",    // Intel Mac / Homebrew legacy
+                "/usr/bin/tmux",          // System path
+                "/bin/tmux",              // Unlikely but check anyway
+            ];
+
+            for path in candidates {
+                let path = PathBuf::from(path);
+                if path.exists() {
+                    log::info!(target: "eocc.tmux", "Found tmux at: {:?}", path);
+                    return Some(path);
+                }
+            }
+
+            // Fallback: try to find via PATH (works in dev mode)
+            if let Ok(output) = Command::new("which").arg("tmux").output() {
+                if output.status.success() {
+                    let path_str = String::from_utf8_lossy(&output.stdout);
+                    let path = PathBuf::from(path_str.trim());
+                    if path.exists() {
+                        log::info!(target: "eocc.tmux", "Found tmux via which: {:?}", path);
+                        return Some(path);
+                    }
+                }
+            }
+
+            log::warn!(target: "eocc.tmux", "tmux not found in any known location");
+            None
+        })
+        .as_ref()
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TmuxPane {
@@ -30,7 +70,11 @@ fn validate_pane_id(pane_id: &str) -> Result<(), String> {
 }
 
 fn run_tmux_command(args: &[&str]) -> Result<String, String> {
-    let output = Command::new("tmux")
+    let tmux_path = get_tmux_path().ok_or_else(|| {
+        "tmux not found. Please ensure tmux is installed (e.g., brew install tmux)".to_string()
+    })?;
+
+    let output = Command::new(tmux_path)
         .args(args)
         .output()
         .map_err(|e| format!("Failed to execute tmux: {}", e))?;
@@ -44,11 +88,7 @@ fn run_tmux_command(args: &[&str]) -> Result<String, String> {
 }
 
 pub fn is_tmux_available() -> bool {
-    Command::new("tmux")
-        .arg("-V")
-        .output()
-        .map(|o| o.status.success())
-        .unwrap_or(false)
+    get_tmux_path().is_some()
 }
 
 pub fn list_panes() -> Result<Vec<TmuxPane>, String> {
