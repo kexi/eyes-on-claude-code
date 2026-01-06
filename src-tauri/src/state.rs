@@ -41,6 +41,10 @@ pub struct EventInfo {
     pub tool_name: String,
     #[serde(default)]
     pub tmux_pane: String,
+    #[serde(default)]
+    pub npx_path: String,
+    #[serde(default)]
+    pub tmux_path: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -126,11 +130,31 @@ impl Default for Settings {
     }
 }
 
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct CachedPaths {
+    #[serde(default)]
+    pub npx_path: String,
+    #[serde(default)]
+    pub tmux_path: String,
+}
+
+impl CachedPaths {
+    pub fn update_from_event(&mut self, event: &EventInfo) {
+        if !event.npx_path.is_empty() {
+            self.npx_path = event.npx_path.clone();
+        }
+        if !event.tmux_path.is_empty() {
+            self.tmux_path = event.tmux_path.clone();
+        }
+    }
+}
+
 #[derive(Default)]
 pub struct AppState {
     pub sessions: HashMap<String, SessionInfo>,
     pub recent_events: VecDeque<EventInfo>,
     pub settings: Settings,
+    pub cached_paths: CachedPaths,
 }
 
 impl AppState {

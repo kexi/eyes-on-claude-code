@@ -184,6 +184,7 @@ pub fn open_diff(
     diff_type: String,
     base_branch: Option<String>,
     app: tauri::AppHandle,
+    state: tauri::State<'_, ManagedState>,
     difit_registry: tauri::State<'_, Arc<DifitProcessRegistry>>,
 ) -> Result<(), String> {
     // Validate project directory
@@ -219,6 +220,15 @@ pub fn open_diff(
 
     // Get next available port
     let port = difit_registry.get_next_port();
+
+    // Get cached npx path from state
+    let npx_path = {
+        let state_guard = state.0.lock().map_err(|_| LOCK_ERROR)?;
+        let path = state_guard.cached_paths.npx_path.clone();
+        if path.is_empty() { None } else { Some(path) }
+    };
+
+    log::info!(target: "eocc.difit", "open_diff: npx_path={:?}", npx_path);
 
     // Create loading page data URL
     let loading_url = format!(
@@ -258,7 +268,7 @@ pub fn open_diff(
     let diff_type_for_title = diff_type.clone();
 
     std::thread::spawn(move || {
-        match start_difit_server(&project_dir, diff, base_branch.as_deref(), port) {
+        match start_difit_server(&project_dir, diff, base_branch.as_deref(), port, npx_path.as_deref()) {
             Ok(server_info) => {
                 // Register the process
                 registry.register(window_label_for_thread.clone(), server_info.process);

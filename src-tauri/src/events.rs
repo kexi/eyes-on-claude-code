@@ -4,6 +4,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::settings::get_events_file;
 use crate::state::{AppState, EventInfo, EventType, NotificationType, SessionInfo, SessionStatus};
+use crate::tmux::set_cached_tmux_path;
 
 pub fn process_event(state: &mut AppState, event: EventInfo) {
     state.recent_events.push_back(event.clone());
@@ -19,6 +20,8 @@ pub fn process_event(state: &mut AppState, event: EventInfo) {
 
     match event.event_type {
         EventType::SessionStart => {
+            state.cached_paths.update_from_event(&event);
+            set_cached_tmux_path(&event.tmux_path);
             state.sessions.insert(
                 key,
                 SessionInfo {
@@ -50,6 +53,8 @@ pub fn process_event(state: &mut AppState, event: EventInfo) {
             state.upsert_session(key, &event, new_status, waiting_info);
         }
         EventType::Stop => {
+            state.cached_paths.update_from_event(&event);
+            set_cached_tmux_path(&event.tmux_path);
             state.upsert_session(key, &event, SessionStatus::Completed, String::new());
         }
         EventType::PostToolUse => {

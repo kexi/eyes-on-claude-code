@@ -1,11 +1,33 @@
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use std::process::Command;
-use std::sync::OnceLock;
+use std::sync::{Mutex, OnceLock};
 
 static TMUX_PATH: OnceLock<Option<PathBuf>> = OnceLock::new();
+static CACHED_TMUX_PATH: Mutex<Option<String>> = Mutex::new(None);
 
-fn get_tmux_path() -> Option<&'static PathBuf> {
+/// Set the cached tmux path from hook events
+pub fn set_cached_tmux_path(path: &str) {
+    if !path.is_empty() {
+        if let Ok(mut cached) = CACHED_TMUX_PATH.lock() {
+            *cached = Some(path.to_string());
+            log::info!(target: "eocc.tmux", "Cached tmux path set to: {}", path);
+        }
+    }
+}
+
+fn get_tmux_path() -> Option<PathBuf> {
+    // First, check if we have a cached path from hooks
+    if let Ok(cached) = CACHED_TMUX_PATH.lock() {
+        if let Some(ref path_str) = *cached {
+            let path = PathBuf::from(path_str);
+            if path.exists() {
+                return Some(path);
+            }
+        }
+    }
+
+    // Fall back to static discovery
     TMUX_PATH
         .get_or_init(|| {
             let candidates = [
@@ -38,7 +60,7 @@ fn get_tmux_path() -> Option<&'static PathBuf> {
             log::warn!(target: "eocc.tmux", "tmux not found in any known location");
             None
         })
-        .as_ref()
+        .clone()
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -74,7 +96,7 @@ fn run_tmux_command(args: &[&str]) -> Result<String, String> {
         "tmux not found. Please ensure tmux is installed (e.g., brew install tmux)".to_string()
     })?;
 
-    let output = Command::new(tmux_path)
+    let output = Command::new(&tmux_path)
         .args(args)
         .output()
         .map_err(|e| format!("Failed to execute tmux: {}", e))?;
