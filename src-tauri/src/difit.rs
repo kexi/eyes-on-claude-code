@@ -1,4 +1,6 @@
+use std::collections::hash_map::DefaultHasher;
 use std::collections::HashMap;
+use std::hash::{Hash, Hasher};
 use std::io::{BufRead, BufReader, Write};
 use std::process::{Child, Command, Stdio};
 use std::sync::mpsc;
@@ -57,54 +59,140 @@ pub struct DifitServerInfo {
     pub process: Child,
 }
 
+struct RegistryInner {
+    processes: HashMap<String, Child>,
+    diff_hashes: HashMap<String, u64>,
+    next_port: u16,
+}
+
+/// Result of comparing and updating a diff hash
+#[derive(Debug, PartialEq)]
+pub enum HashCompareResult {
+    /// Hash is the same as before, no update needed
+    Unchanged,
+    /// Hash has changed, process was killed and hash updated
+    Changed,
+    /// No previous hash existed, new hash was set
+    NewEntry,
+}
+
 /// Registry to track running difit processes by window label
 pub struct DifitProcessRegistry {
-    processes: Mutex<HashMap<String, Child>>,
-    next_port: Mutex<u16>,
+    inner: Mutex<RegistryInner>,
 }
 
 impl DifitProcessRegistry {
     pub fn new() -> Self {
         Self {
-            processes: Mutex::new(HashMap::new()),
-            next_port: Mutex::new(DEFAULT_DIFIT_PORT),
+            inner: Mutex::new(RegistryInner {
+                processes: HashMap::new(),
+                diff_hashes: HashMap::new(),
+                next_port: DEFAULT_DIFIT_PORT,
+            }),
         }
     }
 
     /// Get the next available port
     pub fn get_next_port(&self) -> u16 {
-        let mut port = self.next_port.lock().unwrap();
-        let current = *port;
-        *port = port.wrapping_add(1);
-        if *port < DEFAULT_DIFIT_PORT {
-            *port = DEFAULT_DIFIT_PORT;
+        match self.inner.lock() {
+            Ok(mut inner) => {
+                let current = inner.next_port;
+                inner.next_port = inner.next_port.wrapping_add(1);
+                if inner.next_port < DEFAULT_DIFIT_PORT {
+                    inner.next_port = DEFAULT_DIFIT_PORT;
+                }
+                current
+            }
+            Err(e) => {
+                log::warn!(target: "eocc.difit", "Failed to lock registry for port: {}", e);
+                DEFAULT_DIFIT_PORT
+            }
         }
-        current
     }
 
     /// Register a difit process with a window label
     pub fn register(&self, window_label: String, process: Child) {
-        if let Ok(mut processes) = self.processes.lock() {
-            processes.insert(window_label, process);
+        match self.inner.lock() {
+            Ok(mut inner) => {
+                inner.processes.insert(window_label, process);
+            }
+            Err(e) => {
+                log::warn!(target: "eocc.difit", "Failed to lock registry for register: {}", e);
+            }
         }
     }
 
-    /// Kill and remove a difit process by window label
+    /// Store the diff hash for a window
+    pub fn set_diff_hash(&self, window_label: &str, hash: u64) {
+        match self.inner.lock() {
+            Ok(mut inner) => {
+                inner.diff_hashes.insert(window_label.to_string(), hash);
+            }
+            Err(e) => {
+                log::warn!(target: "eocc.difit", "Failed to lock registry for set_diff_hash: {}", e);
+            }
+        }
+    }
+
+    /// Atomically compare hash and update if changed, killing the process if needed.
+    /// Returns the comparison result.
+    pub fn compare_and_update_hash(&self, window_label: &str, new_hash: u64) -> HashCompareResult {
+        match self.inner.lock() {
+            Ok(mut inner) => {
+                let previous_hash = inner.diff_hashes.get(window_label).copied();
+                match previous_hash {
+                    Some(old_hash) if old_hash == new_hash => HashCompareResult::Unchanged,
+                    Some(_) => {
+                        // Hash changed, kill process and update hash
+                        if let Some(mut process) = inner.processes.remove(window_label) {
+                            let _ = process.kill();
+                            let _ = process.wait();
+                        }
+                        inner.diff_hashes.insert(window_label.to_string(), new_hash);
+                        HashCompareResult::Changed
+                    }
+                    None => {
+                        inner.diff_hashes.insert(window_label.to_string(), new_hash);
+                        HashCompareResult::NewEntry
+                    }
+                }
+            }
+            Err(e) => {
+                log::warn!(target: "eocc.difit", "Failed to lock registry for compare_and_update_hash: {}", e);
+                // Treat as changed to trigger reload (safer default)
+                HashCompareResult::Changed
+            }
+        }
+    }
+
+    /// Kill and remove a difit process and its hash by window label
     pub fn kill(&self, window_label: &str) {
-        if let Ok(mut processes) = self.processes.lock() {
-            if let Some(mut process) = processes.remove(window_label) {
-                let _ = process.kill();
-                let _ = process.wait(); // Reap the zombie process
+        match self.inner.lock() {
+            Ok(mut inner) => {
+                if let Some(mut process) = inner.processes.remove(window_label) {
+                    let _ = process.kill();
+                    let _ = process.wait();
+                }
+                inner.diff_hashes.remove(window_label);
+            }
+            Err(e) => {
+                log::warn!(target: "eocc.difit", "Failed to lock registry for kill: {}", e);
             }
         }
     }
 
     /// Kill all registered difit processes
     pub fn kill_all(&self) {
-        if let Ok(mut processes) = self.processes.lock() {
-            for (_, mut process) in processes.drain() {
-                let _ = process.kill();
-                let _ = process.wait();
+        match self.inner.lock() {
+            Ok(mut inner) => {
+                for (_, mut process) in inner.processes.drain() {
+                    let _ = process.kill();
+                    let _ = process.wait();
+                }
+                inner.diff_hashes.clear();
+            }
+            Err(e) => {
+                log::warn!(target: "eocc.difit", "Failed to lock registry for kill_all: {}", e);
             }
         }
     }
@@ -156,14 +244,12 @@ fn get_untracked_diff(repo_path: &str) -> Vec<u8> {
     combined_diff
 }
 
-/// Start a difit server for the specified repository and diff type
-/// Returns the URL and process handle for management
-pub fn start_difit_server(
+/// Get diff content for the specified repository and diff type
+pub fn get_diff_content(
     repo_path: &str,
     diff_type: DiffType,
     base_branch: Option<&str>,
-    port: u16,
-) -> Result<DifitServerInfo, String> {
+) -> Result<Vec<u8>, String> {
     let git_args = diff_type.git_diff_args(base_branch)?;
 
     // Run git diff and capture output
@@ -190,6 +276,22 @@ pub fn start_difit_server(
         return Err("No diff content to display".to_string());
     }
 
+    Ok(diff_content)
+}
+
+/// Calculate hash of diff content
+pub fn calculate_diff_hash(content: &[u8]) -> u64 {
+    let mut hasher = DefaultHasher::new();
+    content.hash(&mut hasher);
+    hasher.finish()
+}
+
+/// Start a difit server with pre-fetched diff content
+pub fn start_difit_server_with_content(
+    diff_content: Vec<u8>,
+    repo_path: &str,
+    port: u16,
+) -> Result<DifitServerInfo, String> {
     // Start difit with --no-open flag so it doesn't open browser
     let mut difit_process = Command::new("npx")
         .args(["difit", "--no-open", "--port", &port.to_string()])
