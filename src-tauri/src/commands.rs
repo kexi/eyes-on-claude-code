@@ -3,7 +3,10 @@ use std::sync::Arc;
 use tauri::{Manager, WebviewUrl, WebviewWindowBuilder};
 
 use crate::constants::{MINI_VIEW_HEIGHT, MINI_VIEW_WIDTH, SETUP_MODAL_HEIGHT, SETUP_MODAL_WIDTH};
-use crate::difit::{start_difit_server, DiffType, DifitProcessRegistry};
+use crate::difit::{
+    calculate_diff_hash, get_diff_content, start_difit_server_with_content, DiffType,
+    DifitProcessRegistry, HashCompareResult,
+};
 use crate::git::{get_git_info, GitInfo};
 use crate::persist::save_runtime_state;
 use crate::settings::save_settings;
@@ -203,13 +206,6 @@ pub fn open_diff(
     // Generate unique window label based on project and diff type
     let window_label = generate_diff_window_label(&project_dir, &diff_type);
 
-    // Check if window already exists - if so, focus it and return
-    if let Some(existing_window) = app.get_webview_window(&window_label) {
-        let _ = existing_window.show();
-        let _ = existing_window.set_focus();
-        return Ok(());
-    }
-
     let diff = match diff_type.as_str() {
         "unstaged" => DiffType::Unstaged,
         "staged" => DiffType::Staged,
@@ -218,14 +214,15 @@ pub fn open_diff(
         _ => return Err(format!("Unknown diff type: {}", diff_type)),
     };
 
-    // Get next available port
-    let port = difit_registry.get_next_port();
-
     // Get cached npx path from state
     let npx_path = {
         let state_guard = state.0.lock().map_err(|_| LOCK_ERROR)?;
         let path = state_guard.cached_paths.npx_path.clone();
-        if path.is_empty() { None } else { Some(path) }
+        if path.is_empty() {
+            None
+        } else {
+            Some(path)
+        }
     };
 
     log::info!(target: "eocc.difit", "open_diff: npx_path={:?}", npx_path);
@@ -235,6 +232,60 @@ pub fn open_diff(
         "data:text/html;base64,{}",
         base64_encode(LOADING_HTML.as_bytes())
     );
+
+    // Check if window already exists
+    if let Some(existing_window) = app.get_webview_window(&window_label) {
+        // Get current diff content and calculate hash
+        let diff_content = match get_diff_content(&project_dir, diff, base_branch.as_deref()) {
+            Ok(content) => content,
+            Err(e) => {
+                // Show error in existing window (consistent with new window behavior)
+                let _ = existing_window.show();
+                let _ = existing_window.set_focus();
+                show_error_in_window(&existing_window, &e, &diff_type);
+                return Ok(());
+            }
+        };
+        let new_hash = calculate_diff_hash(&diff_content);
+
+        // Atomically check if diff has changed and update hash
+        let compare_result = difit_registry.compare_and_update_hash(&window_label, new_hash);
+        if compare_result == HashCompareResult::Unchanged {
+            // No changes, just focus the window
+            let _ = existing_window.show();
+            let _ = existing_window.set_focus();
+            return Ok(());
+        }
+
+        // Diff has changed (process already killed by compare_and_update_hash)
+        // Show loading page
+        let _ = existing_window.set_title(&format!("Diff - {} (Loading...)", diff_type));
+        if let Ok(url) = loading_url.parse() {
+            let _ = existing_window.navigate(url);
+        }
+        let _ = existing_window.show();
+        let _ = existing_window.set_focus();
+
+        // Get port only when needed
+        let port = difit_registry.get_next_port();
+
+        // Start new difit server in background thread
+        let ctx = DifitSpawnContext {
+            app_handle: app.app_handle().clone(),
+            registry: Arc::clone(&difit_registry),
+            window_label,
+            project_dir,
+            diff_type_display: diff_type,
+            port,
+            npx_path,
+        };
+        spawn_difit_server_with_content(ctx, diff_content);
+
+        return Ok(());
+    }
+
+    // Get port only when creating new window
+    let port = difit_registry.get_next_port();
 
     // Create window immediately with loading page
     let window = WebviewWindowBuilder::new(
@@ -262,54 +313,16 @@ pub fn open_diff(
     });
 
     // Start difit server in background thread
-    let app_handle = app.app_handle().clone();
-    let registry = Arc::clone(&difit_registry);
-    let window_label_for_thread = window_label.clone();
-    let diff_type_for_title = diff_type.clone();
-
-    std::thread::spawn(move || {
-        match start_difit_server(&project_dir, diff, base_branch.as_deref(), port, npx_path.as_deref()) {
-            Ok(server_info) => {
-                // Register the process
-                registry.register(window_label_for_thread.clone(), server_info.process);
-
-                // Navigate window to difit URL
-                if let Some(window) = app_handle.get_webview_window(&window_label_for_thread) {
-                    if let Ok(url) = server_info.url.parse() {
-                        let _ = window.navigate(url);
-                        let _ = window.set_title(&format!("Diff - {}", diff_type_for_title));
-                    }
-                }
-            }
-            Err(e) => {
-                // Show error in window
-                if let Some(window) = app_handle.get_webview_window(&window_label_for_thread) {
-                    let error_html = format!(
-                        r#"data:text/html;base64,{}"#,
-                        base64_encode(
-                            format!(
-                                r#"<!DOCTYPE html><html><head><style>
-                                body {{ margin: 0; display: flex; justify-content: center; align-items: center;
-                                height: 100vh; background: #1a1a2e; color: #e74c3c;
-                                font-family: -apple-system, BlinkMacSystemFont, sans-serif; }}
-                                .error {{ text-align: center; padding: 20px; }}
-                                </style></head><body><div class="error">
-                                <h2>Failed to load diff</h2><p>{}</p>
-                                </div></body></html>"#,
-                                html_escape(&e)
-                            )
-                            .as_bytes()
-                        )
-                    );
-                    if let Ok(url) = error_html.parse() {
-                        let _ = window.navigate(url);
-                        let _ =
-                            window.set_title(&format!("Diff - {} (Error)", diff_type_for_title));
-                    }
-                }
-            }
-        }
-    });
+    let ctx = DifitSpawnContext {
+        app_handle: app.app_handle().clone(),
+        registry: Arc::clone(&difit_registry),
+        window_label,
+        project_dir,
+        diff_type_display: diff_type,
+        port,
+        npx_path,
+    };
+    spawn_difit_server(ctx, diff, base_branch);
 
     Ok(())
 }
@@ -324,6 +337,99 @@ fn html_escape(s: &str) -> String {
         .replace('<', "&lt;")
         .replace('>', "&gt;")
         .replace('"', "&quot;")
+        .replace('\'', "&#x27;")
+}
+
+fn show_error_in_window(window: &tauri::WebviewWindow, error: &str, diff_type: &str) {
+    let error_html = format!(
+        r#"data:text/html;base64,{}"#,
+        base64_encode(
+            format!(
+                r#"<!DOCTYPE html><html><head><style>
+                body {{ margin: 0; display: flex; justify-content: center; align-items: center;
+                height: 100vh; background: #1a1a2e; color: #e74c3c;
+                font-family: -apple-system, BlinkMacSystemFont, sans-serif; }}
+                .error {{ text-align: center; padding: 20px; }}
+                </style></head><body><div class="error">
+                <h2>Failed to load diff</h2><p>{}</p>
+                </div></body></html>"#,
+                html_escape(error)
+            )
+            .as_bytes()
+        )
+    );
+    if let Ok(url) = error_html.parse() {
+        let _ = window.navigate(url);
+        let _ = window.set_title(&format!("Diff - {} (Error)", diff_type));
+    }
+}
+
+struct DifitSpawnContext {
+    app_handle: tauri::AppHandle,
+    registry: Arc<DifitProcessRegistry>,
+    window_label: String,
+    project_dir: String,
+    diff_type_display: String,
+    port: u16,
+    npx_path: Option<String>,
+}
+
+impl DifitSpawnContext {
+    fn handle_server_result(&self, result: Result<crate::difit::DifitServerInfo, String>) {
+        match result {
+            Ok(server_info) => {
+                self.registry
+                    .register(self.window_label.clone(), server_info.process);
+                if let Some(window) = self.app_handle.get_webview_window(&self.window_label) {
+                    if let Ok(url) = server_info.url.parse() {
+                        let _ = window.navigate(url);
+                        let _ = window.set_title(&format!("Diff - {}", self.diff_type_display));
+                    }
+                }
+            }
+            Err(e) => {
+                if let Some(window) = self.app_handle.get_webview_window(&self.window_label) {
+                    show_error_in_window(&window, &e, &self.diff_type_display);
+                }
+            }
+        }
+    }
+}
+
+fn spawn_difit_server(ctx: DifitSpawnContext, diff: DiffType, base_branch: Option<String>) {
+    std::thread::spawn(move || {
+        match get_diff_content(&ctx.project_dir, diff, base_branch.as_deref()) {
+            Ok(diff_content) => {
+                let hash = calculate_diff_hash(&diff_content);
+                ctx.registry.set_diff_hash(&ctx.window_label, hash);
+
+                let result = start_difit_server_with_content(
+                    diff_content,
+                    &ctx.project_dir,
+                    ctx.port,
+                    ctx.npx_path.as_deref(),
+                );
+                ctx.handle_server_result(result);
+            }
+            Err(e) => {
+                if let Some(window) = ctx.app_handle.get_webview_window(&ctx.window_label) {
+                    show_error_in_window(&window, &e, &ctx.diff_type_display);
+                }
+            }
+        }
+    });
+}
+
+fn spawn_difit_server_with_content(ctx: DifitSpawnContext, diff_content: Vec<u8>) {
+    std::thread::spawn(move || {
+        let result = start_difit_server_with_content(
+            diff_content,
+            &ctx.project_dir,
+            ctx.port,
+            ctx.npx_path.as_deref(),
+        );
+        ctx.handle_server_result(result);
+    });
 }
 
 // ============================================================================
