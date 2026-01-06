@@ -19,7 +19,10 @@ pub struct TmuxPaneSize {
 
 fn validate_pane_id(pane_id: &str) -> Result<(), String> {
     // tmux pane ID format: %[0-9]+
-    if pane_id.starts_with('%') && !pane_id[1..].is_empty() && pane_id[1..].chars().all(|c| c.is_ascii_digit()) {
+    if pane_id.starts_with('%')
+        && !pane_id[1..].is_empty()
+        && pane_id[1..].chars().all(|c| c.is_ascii_digit())
+    {
         Ok(())
     } else {
         Err(format!("Invalid pane ID format: {}", pane_id))
@@ -49,7 +52,8 @@ pub fn is_tmux_available() -> bool {
 }
 
 pub fn list_panes() -> Result<Vec<TmuxPane>, String> {
-    let format = "#{session_name}|#{window_index}|#{window_name}|#{pane_index}|#{pane_id}|#{pane_active}";
+    let format =
+        "#{session_name}|#{window_index}|#{window_name}|#{pane_index}|#{pane_id}|#{pane_active}";
     let output = run_tmux_command(&["list-panes", "-a", "-F", format])?;
 
     let panes: Vec<TmuxPane> = output
@@ -80,7 +84,17 @@ pub fn capture_pane(pane_id: &str) -> Result<String, String> {
     // -e: include escape sequences for colors
     // -S -: start from the beginning of history
     // -E -: end at the last line
-    run_tmux_command(&["capture-pane", "-p", "-e", "-S", "-", "-E", "-", "-t", pane_id])
+    run_tmux_command(&[
+        "capture-pane",
+        "-p",
+        "-e",
+        "-S",
+        "-",
+        "-E",
+        "-",
+        "-t",
+        pane_id,
+    ])
 }
 
 pub fn send_keys(pane_id: &str, keys: &str) -> Result<(), String> {

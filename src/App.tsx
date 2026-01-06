@@ -73,10 +73,8 @@ function App() {
 
   // Check setup status on mount (skip for tmux viewer windows)
   useEffect(() => {
-    if (tmuxPaneId) {
-      setSetupChecked(true);
-      return;
-    }
+    // Skip for tmux viewer windows - they render before this check
+    if (tmuxPaneId) return;
 
     getSetupStatus()
       .then((status) => {
