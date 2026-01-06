@@ -4,9 +4,9 @@
 
 # Eyes on Claude Code
 
-An app that collects events from Claude Code **global Hooks** and lets you monitor session states across multiple projects via a **menubar (tray)** and a **dashboard**.
+An app that collects events from Claude Code **global Hooks** and lets you monitor session states across multiple projects via a **menubar (tray)** and a **dashboard**. It also plays nicely with **tmux** — view and interact with your panes right from the dashboard!
 
-![dashboard](https://github.com/user-attachments/assets/1b14b0df-2b63-433c-8654-8a84b4110546)
+![dashboard](https://github.com/user-attachments/assets/0b70bca9-191a-4f38-a711-109350bf58fe)
 
 ---
 

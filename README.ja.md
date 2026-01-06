@@ -4,9 +4,9 @@
 
 # Eyes on Claude Code
 
-Claude Code の **グローバルHooks** からイベントを収集し、複数プロジェクトのセッション状態を **メニューバー（トレイ）** と **ダッシュボード** で一覧できるアプリケーションです。
+Claude Code の **グローバルHooks** からイベントを収集し、複数プロジェクトのセッション状態を **メニューバー（トレイ）** と **ダッシュボード** で一覧できるアプリケーションです。**tmux** との連携もバッチリ — ダッシュボードから直接ペインの表示・操作ができます！
 
-![dashboard](https://github.com/user-attachments/assets/1b14b0df-2b63-433c-8654-8a84b4110546)
+![dashboard](https://github.com/user-attachments/assets/0b70bca9-191a-4f38-a711-109350bf58fe)
 
 ---
 
