@@ -19,3 +19,8 @@ license-report.json
 .vscode/
 
 *.local*
+
+*.swp
+.env
+*.p8
+*.p12
