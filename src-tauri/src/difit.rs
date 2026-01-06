@@ -60,6 +60,7 @@ pub struct DifitServerInfo {
 /// Registry to track running difit processes by window label
 pub struct DifitProcessRegistry {
     processes: Mutex<HashMap<String, Child>>,
+    diff_hashes: Mutex<HashMap<String, u64>>,
     next_port: Mutex<u16>,
 }
 
@@ -67,6 +68,7 @@ impl DifitProcessRegistry {
     pub fn new() -> Self {
         Self {
             processes: Mutex::new(HashMap::new()),
+            diff_hashes: Mutex::new(HashMap::new()),
             next_port: Mutex::new(DEFAULT_DIFIT_PORT),
         }
     }
@@ -89,6 +91,21 @@ impl DifitProcessRegistry {
         }
     }
 
+    /// Store the diff hash for a window
+    pub fn set_diff_hash(&self, window_label: &str, hash: u64) {
+        if let Ok(mut hashes) = self.diff_hashes.lock() {
+            hashes.insert(window_label.to_string(), hash);
+        }
+    }
+
+    /// Get the stored diff hash for a window
+    pub fn get_diff_hash(&self, window_label: &str) -> Option<u64> {
+        self.diff_hashes
+            .lock()
+            .ok()
+            .and_then(|hashes| hashes.get(window_label).copied())
+    }
+
     /// Kill and remove a difit process by window label
     pub fn kill(&self, window_label: &str) {
         if let Ok(mut processes) = self.processes.lock() {
@@ -96,6 +113,9 @@ impl DifitProcessRegistry {
                 let _ = process.kill();
                 let _ = process.wait(); // Reap the zombie process
             }
+        }
+        if let Ok(mut hashes) = self.diff_hashes.lock() {
+            hashes.remove(window_label);
         }
     }
 
@@ -106,6 +126,9 @@ impl DifitProcessRegistry {
                 let _ = process.kill();
                 let _ = process.wait();
             }
+        }
+        if let Ok(mut hashes) = self.diff_hashes.lock() {
+            hashes.clear();
         }
     }
 }
@@ -156,14 +179,12 @@ fn get_untracked_diff(repo_path: &str) -> Vec<u8> {
     combined_diff
 }
 
-/// Start a difit server for the specified repository and diff type
-/// Returns the URL and process handle for management
-pub fn start_difit_server(
+/// Get diff content for the specified repository and diff type
+pub fn get_diff_content(
     repo_path: &str,
     diff_type: DiffType,
     base_branch: Option<&str>,
-    port: u16,
-) -> Result<DifitServerInfo, String> {
+) -> Result<Vec<u8>, String> {
     let git_args = diff_type.git_diff_args(base_branch)?;
 
     // Run git diff and capture output
@@ -190,6 +211,25 @@ pub fn start_difit_server(
         return Err("No diff content to display".to_string());
     }
 
+    Ok(diff_content)
+}
+
+/// Calculate hash of diff content
+pub fn calculate_diff_hash(content: &[u8]) -> u64 {
+    use std::collections::hash_map::DefaultHasher;
+    use std::hash::{Hash, Hasher};
+
+    let mut hasher = DefaultHasher::new();
+    content.hash(&mut hasher);
+    hasher.finish()
+}
+
+/// Start a difit server with pre-fetched diff content
+pub fn start_difit_server_with_content(
+    diff_content: Vec<u8>,
+    repo_path: &str,
+    port: u16,
+) -> Result<DifitServerInfo, String> {
     // Start difit with --no-open flag so it doesn't open browser
     let mut difit_process = Command::new("npx")
         .args(["difit", "--no-open", "--port", &port.to_string()])

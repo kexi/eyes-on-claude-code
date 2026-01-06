@@ -3,7 +3,10 @@ use std::sync::Arc;
 use tauri::{Manager, WebviewUrl, WebviewWindowBuilder};
 
 use crate::constants::{MINI_VIEW_HEIGHT, MINI_VIEW_WIDTH, SETUP_MODAL_HEIGHT, SETUP_MODAL_WIDTH};
-use crate::difit::{start_difit_server, DiffType, DifitProcessRegistry};
+use crate::difit::{
+    calculate_diff_hash, get_diff_content, start_difit_server_with_content, DiffType,
+    DifitProcessRegistry,
+};
 use crate::git::{get_git_info, GitInfo};
 use crate::persist::save_runtime_state;
 use crate::settings::save_settings;
@@ -219,10 +222,24 @@ pub fn open_diff(
         base64_encode(LOADING_HTML.as_bytes())
     );
 
-    // Check if window already exists - if so, reload diff
+    // Check if window already exists
     if let Some(existing_window) = app.get_webview_window(&window_label) {
-        // Kill existing difit process
+        // Get current diff content and calculate hash
+        let diff_content = get_diff_content(&project_dir, diff, base_branch.as_deref())?;
+        let new_hash = calculate_diff_hash(&diff_content);
+
+        // Check if diff has changed
+        let previous_hash = difit_registry.get_diff_hash(&window_label);
+        if previous_hash == Some(new_hash) {
+            // No changes, just focus the window
+            let _ = existing_window.show();
+            let _ = existing_window.set_focus();
+            return Ok(());
+        }
+
+        // Diff has changed, reload it
         difit_registry.kill(&window_label);
+        difit_registry.set_diff_hash(&window_label, new_hash);
 
         // Show loading page
         let _ = existing_window.set_title(&format!("Diff - {} (Loading...)", diff_type));
@@ -233,13 +250,12 @@ pub fn open_diff(
         let _ = existing_window.set_focus();
 
         // Start new difit server in background thread
-        spawn_difit_server(
+        spawn_difit_server_with_content(
             app.app_handle().clone(),
             Arc::clone(&difit_registry),
             window_label,
+            diff_content,
             project_dir,
-            diff,
-            base_branch,
             diff_type,
             port,
         );
@@ -334,7 +350,49 @@ fn spawn_difit_server(
     port: u16,
 ) {
     std::thread::spawn(move || {
-        match start_difit_server(&project_dir, diff, base_branch.as_deref(), port) {
+        // Get diff content first to calculate hash
+        match get_diff_content(&project_dir, diff, base_branch.as_deref()) {
+            Ok(diff_content) => {
+                let hash = calculate_diff_hash(&diff_content);
+                registry.set_diff_hash(&window_label, hash);
+
+                match start_difit_server_with_content(diff_content, &project_dir, port) {
+                    Ok(server_info) => {
+                        registry.register(window_label.clone(), server_info.process);
+                        if let Some(window) = app_handle.get_webview_window(&window_label) {
+                            if let Ok(url) = server_info.url.parse() {
+                                let _ = window.navigate(url);
+                                let _ = window.set_title(&format!("Diff - {}", diff_type_display));
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        if let Some(window) = app_handle.get_webview_window(&window_label) {
+                            show_error_in_window(&window, &e, &diff_type_display);
+                        }
+                    }
+                }
+            }
+            Err(e) => {
+                if let Some(window) = app_handle.get_webview_window(&window_label) {
+                    show_error_in_window(&window, &e, &diff_type_display);
+                }
+            }
+        }
+    });
+}
+
+fn spawn_difit_server_with_content(
+    app_handle: tauri::AppHandle,
+    registry: Arc<DifitProcessRegistry>,
+    window_label: String,
+    diff_content: Vec<u8>,
+    project_dir: String,
+    diff_type_display: String,
+    port: u16,
+) {
+    std::thread::spawn(move || {
+        match start_difit_server_with_content(diff_content, &project_dir, port) {
             Ok(server_info) => {
                 registry.register(window_label.clone(), server_info.process);
                 if let Some(window) = app_handle.get_webview_window(&window_label) {
