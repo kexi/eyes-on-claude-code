@@ -5,7 +5,7 @@ use tauri::{Manager, WebviewUrl, WebviewWindowBuilder};
 use crate::constants::{MINI_VIEW_HEIGHT, MINI_VIEW_WIDTH, SETUP_MODAL_HEIGHT, SETUP_MODAL_WIDTH};
 use crate::difit::{
     calculate_diff_hash, get_diff_content, start_difit_server_with_content, DiffType,
-    DifitProcessRegistry,
+    DifitProcessRegistry, HashCompareResult,
 };
 use crate::git::{get_git_info, GitInfo};
 use crate::persist::save_runtime_state;
@@ -213,9 +213,6 @@ pub fn open_diff(
         _ => return Err(format!("Unknown diff type: {}", diff_type)),
     };
 
-    // Get next available port
-    let port = difit_registry.get_next_port();
-
     // Create loading page data URL
     let loading_url = format!(
         "data:text/html;base64,{}",
@@ -237,19 +234,16 @@ pub fn open_diff(
         };
         let new_hash = calculate_diff_hash(&diff_content);
 
-        // Check if diff has changed
-        let previous_hash = difit_registry.get_diff_hash(&window_label);
-        if previous_hash == Some(new_hash) {
+        // Atomically check if diff has changed and update hash
+        let compare_result = difit_registry.compare_and_update_hash(&window_label, new_hash);
+        if compare_result == HashCompareResult::Unchanged {
             // No changes, just focus the window
             let _ = existing_window.show();
             let _ = existing_window.set_focus();
             return Ok(());
         }
 
-        // Diff has changed, reload it
-        difit_registry.kill_process(&window_label);
-        difit_registry.set_diff_hash(&window_label, new_hash);
-
+        // Diff has changed (process already killed by compare_and_update_hash)
         // Show loading page
         let _ = existing_window.set_title(&format!("Diff - {} (Loading...)", diff_type));
         if let Ok(url) = loading_url.parse() {
@@ -257,6 +251,9 @@ pub fn open_diff(
         }
         let _ = existing_window.show();
         let _ = existing_window.set_focus();
+
+        // Get port only when needed
+        let port = difit_registry.get_next_port();
 
         // Start new difit server in background thread
         let ctx = DifitSpawnContext {
@@ -271,6 +268,9 @@ pub fn open_diff(
 
         return Ok(());
     }
+
+    // Get port only when creating new window
+    let port = difit_registry.get_next_port();
 
     // Create window immediately with loading page
     let window = WebviewWindowBuilder::new(
@@ -321,6 +321,7 @@ fn html_escape(s: &str) -> String {
         .replace('<', "&lt;")
         .replace('>', "&gt;")
         .replace('"', "&quot;")
+        .replace('\'', "&#x27;")
 }
 
 fn show_error_in_window(window: &tauri::WebviewWindow, error: &str, diff_type: &str) {
