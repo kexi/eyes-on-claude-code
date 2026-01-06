@@ -259,15 +259,15 @@ pub fn open_diff(
         let _ = existing_window.set_focus();
 
         // Start new difit server in background thread
-        spawn_difit_server_with_content(
-            app.app_handle().clone(),
-            Arc::clone(&difit_registry),
+        let ctx = DifitSpawnContext {
+            app_handle: app.app_handle().clone(),
+            registry: Arc::clone(&difit_registry),
             window_label,
-            diff_content,
             project_dir,
-            diff_type,
+            diff_type_display: diff_type,
             port,
-        );
+        };
+        spawn_difit_server_with_content(ctx, diff_content);
 
         return Ok(());
     }
@@ -298,16 +298,15 @@ pub fn open_diff(
     });
 
     // Start difit server in background thread
-    spawn_difit_server(
-        app.app_handle().clone(),
-        Arc::clone(&difit_registry),
+    let ctx = DifitSpawnContext {
+        app_handle: app.app_handle().clone(),
+        registry: Arc::clone(&difit_registry),
         window_label,
         project_dir,
-        diff,
-        base_branch,
-        diff_type,
+        diff_type_display: diff_type,
         port,
-    );
+    };
+    spawn_difit_server(ctx, diff, base_branch);
 
     Ok(())
 }
@@ -348,83 +347,61 @@ fn show_error_in_window(window: &tauri::WebviewWindow, error: &str, diff_type: &
     }
 }
 
-fn handle_difit_server_result(
-    app_handle: &tauri::AppHandle,
-    registry: &Arc<DifitProcessRegistry>,
-    window_label: &str,
-    diff_type_display: &str,
-    result: Result<crate::difit::DifitServerInfo, String>,
-) {
-    match result {
-        Ok(server_info) => {
-            registry.register(window_label.to_string(), server_info.process);
-            if let Some(window) = app_handle.get_webview_window(window_label) {
-                if let Ok(url) = server_info.url.parse() {
-                    let _ = window.navigate(url);
-                    let _ = window.set_title(&format!("Diff - {}", diff_type_display));
+struct DifitSpawnContext {
+    app_handle: tauri::AppHandle,
+    registry: Arc<DifitProcessRegistry>,
+    window_label: String,
+    project_dir: String,
+    diff_type_display: String,
+    port: u16,
+}
+
+impl DifitSpawnContext {
+    fn handle_server_result(&self, result: Result<crate::difit::DifitServerInfo, String>) {
+        match result {
+            Ok(server_info) => {
+                self.registry
+                    .register(self.window_label.clone(), server_info.process);
+                if let Some(window) = self.app_handle.get_webview_window(&self.window_label) {
+                    if let Ok(url) = server_info.url.parse() {
+                        let _ = window.navigate(url);
+                        let _ = window.set_title(&format!("Diff - {}", self.diff_type_display));
+                    }
                 }
             }
-        }
-        Err(e) => {
-            if let Some(window) = app_handle.get_webview_window(window_label) {
-                show_error_in_window(&window, &e, diff_type_display);
+            Err(e) => {
+                if let Some(window) = self.app_handle.get_webview_window(&self.window_label) {
+                    show_error_in_window(&window, &e, &self.diff_type_display);
+                }
             }
         }
     }
 }
 
-fn spawn_difit_server(
-    app_handle: tauri::AppHandle,
-    registry: Arc<DifitProcessRegistry>,
-    window_label: String,
-    project_dir: String,
-    diff: DiffType,
-    base_branch: Option<String>,
-    diff_type_display: String,
-    port: u16,
-) {
+fn spawn_difit_server(ctx: DifitSpawnContext, diff: DiffType, base_branch: Option<String>) {
     std::thread::spawn(move || {
-        match get_diff_content(&project_dir, diff, base_branch.as_deref()) {
+        match get_diff_content(&ctx.project_dir, diff, base_branch.as_deref()) {
             Ok(diff_content) => {
                 let hash = calculate_diff_hash(&diff_content);
-                registry.set_diff_hash(&window_label, hash);
+                ctx.registry.set_diff_hash(&ctx.window_label, hash);
 
-                let result = start_difit_server_with_content(diff_content, &project_dir, port);
-                handle_difit_server_result(
-                    &app_handle,
-                    &registry,
-                    &window_label,
-                    &diff_type_display,
-                    result,
-                );
+                let result =
+                    start_difit_server_with_content(diff_content, &ctx.project_dir, ctx.port);
+                ctx.handle_server_result(result);
             }
             Err(e) => {
-                if let Some(window) = app_handle.get_webview_window(&window_label) {
-                    show_error_in_window(&window, &e, &diff_type_display);
+                if let Some(window) = ctx.app_handle.get_webview_window(&ctx.window_label) {
+                    show_error_in_window(&window, &e, &ctx.diff_type_display);
                 }
             }
         }
     });
 }
 
-fn spawn_difit_server_with_content(
-    app_handle: tauri::AppHandle,
-    registry: Arc<DifitProcessRegistry>,
-    window_label: String,
-    diff_content: Vec<u8>,
-    project_dir: String,
-    diff_type_display: String,
-    port: u16,
-) {
+fn spawn_difit_server_with_content(ctx: DifitSpawnContext, diff_content: Vec<u8>) {
     std::thread::spawn(move || {
-        let result = start_difit_server_with_content(diff_content, &project_dir, port);
-        handle_difit_server_result(
-            &app_handle,
-            &registry,
-            &window_label,
-            &diff_type_display,
-            result,
-        );
+        let result = start_difit_server_with_content(diff_content, &ctx.project_dir, ctx.port);
+        ctx.handle_server_result(result);
     });
 }
 
