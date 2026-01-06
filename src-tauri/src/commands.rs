@@ -202,13 +202,6 @@ pub fn open_diff(
     // Generate unique window label based on project and diff type
     let window_label = generate_diff_window_label(&project_dir, &diff_type);
 
-    // Check if window already exists - if so, focus it and return
-    if let Some(existing_window) = app.get_webview_window(&window_label) {
-        let _ = existing_window.show();
-        let _ = existing_window.set_focus();
-        return Ok(());
-    }
-
     let diff = match diff_type.as_str() {
         "unstaged" => DiffType::Unstaged,
         "staged" => DiffType::Staged,
@@ -225,6 +218,34 @@ pub fn open_diff(
         "data:text/html;base64,{}",
         base64_encode(LOADING_HTML.as_bytes())
     );
+
+    // Check if window already exists - if so, reload diff
+    if let Some(existing_window) = app.get_webview_window(&window_label) {
+        // Kill existing difit process
+        difit_registry.kill(&window_label);
+
+        // Show loading page
+        let _ = existing_window.set_title(&format!("Diff - {} (Loading...)", diff_type));
+        if let Ok(url) = loading_url.parse() {
+            let _ = existing_window.navigate(url);
+        }
+        let _ = existing_window.show();
+        let _ = existing_window.set_focus();
+
+        // Start new difit server in background thread
+        spawn_difit_server(
+            app.app_handle().clone(),
+            Arc::clone(&difit_registry),
+            window_label,
+            project_dir,
+            diff,
+            base_branch,
+            diff_type,
+            port,
+        );
+
+        return Ok(());
+    }
 
     // Create window immediately with loading page
     let window = WebviewWindowBuilder::new(
@@ -252,54 +273,16 @@ pub fn open_diff(
     });
 
     // Start difit server in background thread
-    let app_handle = app.app_handle().clone();
-    let registry = Arc::clone(&difit_registry);
-    let window_label_for_thread = window_label.clone();
-    let diff_type_for_title = diff_type.clone();
-
-    std::thread::spawn(move || {
-        match start_difit_server(&project_dir, diff, base_branch.as_deref(), port) {
-            Ok(server_info) => {
-                // Register the process
-                registry.register(window_label_for_thread.clone(), server_info.process);
-
-                // Navigate window to difit URL
-                if let Some(window) = app_handle.get_webview_window(&window_label_for_thread) {
-                    if let Ok(url) = server_info.url.parse() {
-                        let _ = window.navigate(url);
-                        let _ = window.set_title(&format!("Diff - {}", diff_type_for_title));
-                    }
-                }
-            }
-            Err(e) => {
-                // Show error in window
-                if let Some(window) = app_handle.get_webview_window(&window_label_for_thread) {
-                    let error_html = format!(
-                        r#"data:text/html;base64,{}"#,
-                        base64_encode(
-                            format!(
-                                r#"<!DOCTYPE html><html><head><style>
-                                body {{ margin: 0; display: flex; justify-content: center; align-items: center;
-                                height: 100vh; background: #1a1a2e; color: #e74c3c;
-                                font-family: -apple-system, BlinkMacSystemFont, sans-serif; }}
-                                .error {{ text-align: center; padding: 20px; }}
-                                </style></head><body><div class="error">
-                                <h2>Failed to load diff</h2><p>{}</p>
-                                </div></body></html>"#,
-                                html_escape(&e)
-                            )
-                            .as_bytes()
-                        )
-                    );
-                    if let Ok(url) = error_html.parse() {
-                        let _ = window.navigate(url);
-                        let _ =
-                            window.set_title(&format!("Diff - {} (Error)", diff_type_for_title));
-                    }
-                }
-            }
-        }
-    });
+    spawn_difit_server(
+        app.app_handle().clone(),
+        Arc::clone(&difit_registry),
+        window_label,
+        project_dir,
+        diff,
+        base_branch,
+        diff_type,
+        port,
+    );
 
     Ok(())
 }
@@ -314,6 +297,60 @@ fn html_escape(s: &str) -> String {
         .replace('<', "&lt;")
         .replace('>', "&gt;")
         .replace('"', "&quot;")
+}
+
+fn show_error_in_window(window: &tauri::WebviewWindow, error: &str, diff_type: &str) {
+    let error_html = format!(
+        r#"data:text/html;base64,{}"#,
+        base64_encode(
+            format!(
+                r#"<!DOCTYPE html><html><head><style>
+                body {{ margin: 0; display: flex; justify-content: center; align-items: center;
+                height: 100vh; background: #1a1a2e; color: #e74c3c;
+                font-family: -apple-system, BlinkMacSystemFont, sans-serif; }}
+                .error {{ text-align: center; padding: 20px; }}
+                </style></head><body><div class="error">
+                <h2>Failed to load diff</h2><p>{}</p>
+                </div></body></html>"#,
+                html_escape(error)
+            )
+            .as_bytes()
+        )
+    );
+    if let Ok(url) = error_html.parse() {
+        let _ = window.navigate(url);
+        let _ = window.set_title(&format!("Diff - {} (Error)", diff_type));
+    }
+}
+
+fn spawn_difit_server(
+    app_handle: tauri::AppHandle,
+    registry: Arc<DifitProcessRegistry>,
+    window_label: String,
+    project_dir: String,
+    diff: DiffType,
+    base_branch: Option<String>,
+    diff_type_display: String,
+    port: u16,
+) {
+    std::thread::spawn(move || {
+        match start_difit_server(&project_dir, diff, base_branch.as_deref(), port) {
+            Ok(server_info) => {
+                registry.register(window_label.clone(), server_info.process);
+                if let Some(window) = app_handle.get_webview_window(&window_label) {
+                    if let Ok(url) = server_info.url.parse() {
+                        let _ = window.navigate(url);
+                        let _ = window.set_title(&format!("Diff - {}", diff_type_display));
+                    }
+                }
+            }
+            Err(e) => {
+                if let Some(window) = app_handle.get_webview_window(&window_label) {
+                    show_error_in_window(&window, &e, &diff_type_display);
+                }
+            }
+        }
+    });
 }
 
 // ============================================================================
