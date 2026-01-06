@@ -244,7 +244,9 @@ export const TmuxViewer = ({ paneId }: TmuxViewerProps) => {
       onClick={handleContainerClick}
     >
       {error && (
-        <div className="mx-2 mt-2 rounded bg-red-900/50 px-3 py-2 text-sm text-red-200">{error}</div>
+        <div className="mx-2 mt-2 rounded bg-red-900/50 px-3 py-2 text-sm text-red-200">
+          {error}
+        </div>
       )}
 
       <div className="flex-1 overflow-hidden p-2 pb-16">

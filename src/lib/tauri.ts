@@ -1,7 +1,15 @@
 import { invoke } from '@tauri-apps/api/core';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 import { getCurrentWindow, getAllWindows } from '@tauri-apps/api/window';
-import type { DashboardData, DiffType, GitInfo, Settings, SetupStatus, TmuxPane, TmuxPaneSize } from '@/types';
+import type {
+  DashboardData,
+  DiffType,
+  GitInfo,
+  Settings,
+  SetupStatus,
+  TmuxPane,
+  TmuxPaneSize,
+} from '@/types';
 
 // Commands
 export const getDashboardData = () => invoke<DashboardData>('get_dashboard_data');

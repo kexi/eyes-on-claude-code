@@ -1,7 +1,13 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import type { SessionInfo, GitInfo } from '@/types';
 import { getStatusEmoji, getStatusClass, formatRelativeTime } from '@/lib/utils';
-import { removeSession, getRepoGitInfo, openDiff, openTmuxViewer, type DiffType } from '@/lib/tauri';
+import {
+  removeSession,
+  getRepoGitInfo,
+  openDiff,
+  openTmuxViewer,
+  type DiffType,
+} from '@/lib/tauri';
 import { ChevronDownIcon } from './icons';
 import { DiffButton } from './DiffButton';
 
@@ -229,7 +235,6 @@ export const SessionCard = ({ session }: SessionCardProps) => {
                 </div>
                 <DiffButton onClick={() => handleDiffClick('branch')} small className="shrink-0" />
               </div>
-
             </>
           ) : (
             <div className="text-text-secondary text-[0.625rem]">Not a git repository</div>
