@@ -1,6 +1,6 @@
 {
   "name": "eyes-on-claude-code",
-  "version": "0.0.3",
+  "version": "0.0.4",
   "description": "A menubar app to monitor your Claude Code sessions, view git changes, and get notifications for permission prompts",
   "keywords": [
     "claude",
