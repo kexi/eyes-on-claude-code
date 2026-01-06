@@ -34,3 +34,4 @@ This writes `license-report.json` (not committed by default). It summarizes:
   - You can comply by selecting the MIT or Apache-2.0 option (LGPL is an alternative option, not mandatory).
 
 
+

@@ -20,6 +20,7 @@ export interface SessionInfo {
   status: SessionStatus;
   last_event: string;
   waiting_for: string;
+  tmux_pane: string;
 }
 
 export interface EventInfo {
@@ -32,6 +33,7 @@ export interface EventInfo {
   message: string;
   notification_type: NotificationType;
   tool_name: string;
+  tmux_pane: string;
 }
 
 export interface DashboardData {
@@ -58,6 +60,22 @@ export interface GitInfo {
 
 // Diff type for difit integration
 export type DiffType = 'unstaged' | 'staged' | 'commit' | 'branch';
+
+// Tmux pane information
+export interface TmuxPane {
+  session_name: string;
+  window_index: number;
+  window_name: string;
+  pane_index: number;
+  pane_id: string;
+  is_active: boolean;
+}
+
+// Tmux pane size (columns x rows)
+export interface TmuxPaneSize {
+  width: number;
+  height: number;
+}
 
 // Status of each individual hook type
 export interface HookStatus {

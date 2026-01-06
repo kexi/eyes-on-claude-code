@@ -1,8 +1,14 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import type { SessionInfo, GitInfo } from '@/types';
 import { getStatusEmoji, getStatusClass, formatRelativeTime } from '@/lib/utils';
-import { removeSession, getRepoGitInfo, openDiff, type DiffType } from '@/lib/tauri';
-import { ChevronDownIcon, RefreshIcon } from './icons';
+import {
+  removeSession,
+  getRepoGitInfo,
+  openDiff,
+  openTmuxViewer,
+  type DiffType,
+} from '@/lib/tauri';
+import { ChevronDownIcon } from './icons';
 import { DiffButton } from './DiffButton';
 
 const FOCUS_REFRESH_MIN_INTERVAL = 5000;
@@ -112,6 +118,18 @@ export const SessionCard = ({ session }: SessionCardProps) => {
     }
   };
 
+  const handleOpenTmuxViewer = async () => {
+    if (!session.tmux_pane) return;
+    try {
+      setError(null);
+      await openTmuxViewer(session.tmux_pane);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      setError(`Failed to open tmux viewer: ${message}`);
+      console.error('Failed to open tmux viewer:', err);
+    }
+  };
+
   const borderColor = {
     waiting: 'border-l-4 border-warning',
     completed: 'border-l-4 border-info',
@@ -217,21 +235,29 @@ export const SessionCard = ({ session }: SessionCardProps) => {
                 </div>
                 <DiffButton onClick={() => handleDiffClick('branch')} small className="shrink-0" />
               </div>
-
-              {/* Refresh button */}
-              <div className="pt-1">
-                <button
-                  onClick={fetchGitInfo}
-                  disabled={isLoadingGit}
-                  className="flex items-center gap-1 text-[0.625rem] text-text-secondary hover:text-white transition-colors disabled:opacity-50"
-                >
-                  <RefreshIcon className={`w-3 h-3 ${isLoadingGit ? 'animate-spin' : ''}`} />
-                  Refresh
-                </button>
-              </div>
             </>
           ) : (
             <div className="text-text-secondary text-[0.625rem]">Not a git repository</div>
+          )}
+
+          {/* tmux pane info */}
+          {session.tmux_pane && (
+            <div className="pt-1.5 border-t border-bg-card">
+              <div className="flex items-center justify-between py-0.5">
+                <div className="flex items-center gap-1">
+                  <span className="text-text-secondary text-[0.625rem]">tmux:</span>
+                  <span className="text-purple-400 text-[0.625rem] font-mono">
+                    {session.tmux_pane}
+                  </span>
+                </div>
+                <button
+                  onClick={handleOpenTmuxViewer}
+                  className="text-[0.625rem] text-text-secondary hover:text-white px-1.5 py-0.5 bg-bg-card rounded hover:bg-white/10 transition-colors"
+                >
+                  Display TMUX session
+                </button>
+              </div>
+            </div>
           )}
 
           {/* Remove session button */}

@@ -39,6 +39,8 @@ pub struct EventInfo {
     pub notification_type: NotificationType,
     #[serde(default)]
     pub tool_name: String,
+    #[serde(default)]
+    pub tmux_pane: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -49,6 +51,8 @@ pub struct SessionInfo {
     pub last_event: String,
     #[serde(default)]
     pub waiting_for: String,
+    #[serde(default)]
+    pub tmux_pane: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -173,6 +177,9 @@ impl AppState {
                 s.status = status.clone();
                 s.last_event = event.timestamp.clone();
                 s.waiting_for = waiting_for.clone();
+                if !event.tmux_pane.is_empty() {
+                    s.tmux_pane = event.tmux_pane.clone();
+                }
             })
             .or_insert_with(|| SessionInfo {
                 project_name: event.project_name.clone(),
@@ -180,6 +187,7 @@ impl AppState {
                 status,
                 last_event: event.timestamp.clone(),
                 waiting_for,
+                tmux_pane: event.tmux_pane.clone(),
             });
     }
 }
