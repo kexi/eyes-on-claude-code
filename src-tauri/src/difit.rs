@@ -1,4 +1,6 @@
+use std::collections::hash_map::DefaultHasher;
 use std::collections::HashMap;
+use std::hash::{Hash, Hasher};
 use std::io::{BufRead, BufReader, Write};
 use std::process::{Child, Command, Stdio};
 use std::sync::mpsc;
@@ -57,78 +59,90 @@ pub struct DifitServerInfo {
     pub process: Child,
 }
 
+struct RegistryInner {
+    processes: HashMap<String, Child>,
+    diff_hashes: HashMap<String, u64>,
+    next_port: u16,
+}
+
 /// Registry to track running difit processes by window label
 pub struct DifitProcessRegistry {
-    processes: Mutex<HashMap<String, Child>>,
-    diff_hashes: Mutex<HashMap<String, u64>>,
-    next_port: Mutex<u16>,
+    inner: Mutex<RegistryInner>,
 }
 
 impl DifitProcessRegistry {
     pub fn new() -> Self {
         Self {
-            processes: Mutex::new(HashMap::new()),
-            diff_hashes: Mutex::new(HashMap::new()),
-            next_port: Mutex::new(DEFAULT_DIFIT_PORT),
+            inner: Mutex::new(RegistryInner {
+                processes: HashMap::new(),
+                diff_hashes: HashMap::new(),
+                next_port: DEFAULT_DIFIT_PORT,
+            }),
         }
     }
 
     /// Get the next available port
     pub fn get_next_port(&self) -> u16 {
-        let mut port = self.next_port.lock().unwrap();
-        let current = *port;
-        *port = port.wrapping_add(1);
-        if *port < DEFAULT_DIFIT_PORT {
-            *port = DEFAULT_DIFIT_PORT;
+        let mut inner = self.inner.lock().unwrap();
+        let current = inner.next_port;
+        inner.next_port = inner.next_port.wrapping_add(1);
+        if inner.next_port < DEFAULT_DIFIT_PORT {
+            inner.next_port = DEFAULT_DIFIT_PORT;
         }
         current
     }
 
     /// Register a difit process with a window label
     pub fn register(&self, window_label: String, process: Child) {
-        if let Ok(mut processes) = self.processes.lock() {
-            processes.insert(window_label, process);
+        if let Ok(mut inner) = self.inner.lock() {
+            inner.processes.insert(window_label, process);
         }
     }
 
     /// Store the diff hash for a window
     pub fn set_diff_hash(&self, window_label: &str, hash: u64) {
-        if let Ok(mut hashes) = self.diff_hashes.lock() {
-            hashes.insert(window_label.to_string(), hash);
+        if let Ok(mut inner) = self.inner.lock() {
+            inner.diff_hashes.insert(window_label.to_string(), hash);
         }
     }
 
     /// Get the stored diff hash for a window
     pub fn get_diff_hash(&self, window_label: &str) -> Option<u64> {
-        self.diff_hashes
+        self.inner
             .lock()
             .ok()
-            .and_then(|hashes| hashes.get(window_label).copied())
+            .and_then(|inner| inner.diff_hashes.get(window_label).copied())
     }
 
-    /// Kill and remove a difit process by window label
-    pub fn kill(&self, window_label: &str) {
-        if let Ok(mut processes) = self.processes.lock() {
-            if let Some(mut process) = processes.remove(window_label) {
+    /// Kill a difit process without removing the hash (for reloading)
+    pub fn kill_process(&self, window_label: &str) {
+        if let Ok(mut inner) = self.inner.lock() {
+            if let Some(mut process) = inner.processes.remove(window_label) {
                 let _ = process.kill();
                 let _ = process.wait(); // Reap the zombie process
             }
         }
-        if let Ok(mut hashes) = self.diff_hashes.lock() {
-            hashes.remove(window_label);
+    }
+
+    /// Kill and remove a difit process and its hash by window label
+    pub fn kill(&self, window_label: &str) {
+        if let Ok(mut inner) = self.inner.lock() {
+            if let Some(mut process) = inner.processes.remove(window_label) {
+                let _ = process.kill();
+                let _ = process.wait();
+            }
+            inner.diff_hashes.remove(window_label);
         }
     }
 
     /// Kill all registered difit processes
     pub fn kill_all(&self) {
-        if let Ok(mut processes) = self.processes.lock() {
-            for (_, mut process) in processes.drain() {
+        if let Ok(mut inner) = self.inner.lock() {
+            for (_, mut process) in inner.processes.drain() {
                 let _ = process.kill();
                 let _ = process.wait();
             }
-        }
-        if let Ok(mut hashes) = self.diff_hashes.lock() {
-            hashes.clear();
+            inner.diff_hashes.clear();
         }
     }
 }
@@ -216,9 +230,6 @@ pub fn get_diff_content(
 
 /// Calculate hash of diff content
 pub fn calculate_diff_hash(content: &[u8]) -> u64 {
-    use std::collections::hash_map::DefaultHasher;
-    use std::hash::{Hash, Hasher};
-
     let mut hasher = DefaultHasher::new();
     content.hash(&mut hasher);
     hasher.finish()
