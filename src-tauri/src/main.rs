@@ -146,6 +146,7 @@ fn main() {
     tauri::Builder::default()
         .plugin(
             tauri_plugin_log::Builder::new()
+                .level(log::LevelFilter::Info)
                 .max_file_size(10 * 1024 * 1024)
                 .rotation_strategy(RotationStrategy::KeepOne)
                 .build(),
@@ -194,10 +195,13 @@ fn main() {
                     tauri::Error::Anyhow(anyhow::anyhow!("Failed to acquire state lock"))
                 })?;
                 state_guard.settings = load_settings(&app_handle);
-                // Restore previous in-memory state snapshot (sessions/recent events)
+                // Restore previous in-memory state snapshot (sessions/recent events/cached paths)
                 if let Some(restored) = load_runtime_state(&app_handle) {
                     state_guard.sessions = restored.sessions;
                     state_guard.recent_events = restored.recent_events;
+                    state_guard.cached_paths = restored.cached_paths.clone();
+                    // Also set the cached tmux path in the tmux module
+                    tmux::set_cached_tmux_path(&restored.cached_paths.tmux_path);
                 }
                 // Drain any queued events written by the hook while app was not running
                 let new_events = drain_events_queue(&app_handle, &mut state_guard);

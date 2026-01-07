@@ -187,6 +187,7 @@ pub fn open_diff(
     diff_type: String,
     base_branch: Option<String>,
     app: tauri::AppHandle,
+    state: tauri::State<'_, ManagedState>,
     difit_registry: tauri::State<'_, Arc<DifitProcessRegistry>>,
 ) -> Result<(), String> {
     // Validate project directory
@@ -212,6 +213,19 @@ pub fn open_diff(
         "branch" => DiffType::Branch,
         _ => return Err(format!("Unknown diff type: {}", diff_type)),
     };
+
+    // Get cached npx path from state
+    let npx_path = {
+        let state_guard = state.0.lock().map_err(|_| LOCK_ERROR)?;
+        let path = state_guard.cached_paths.npx_path.clone();
+        if path.is_empty() {
+            None
+        } else {
+            Some(path)
+        }
+    };
+
+    log::info!(target: "eocc.difit", "open_diff: npx_path={:?}", npx_path);
 
     // Create loading page data URL
     let loading_url = format!(
@@ -263,6 +277,7 @@ pub fn open_diff(
             project_dir,
             diff_type_display: diff_type,
             port,
+            npx_path,
         };
         spawn_difit_server_with_content(ctx, diff_content);
 
@@ -305,6 +320,7 @@ pub fn open_diff(
         project_dir,
         diff_type_display: diff_type,
         port,
+        npx_path,
     };
     spawn_difit_server(ctx, diff, base_branch);
 
@@ -355,6 +371,7 @@ struct DifitSpawnContext {
     project_dir: String,
     diff_type_display: String,
     port: u16,
+    npx_path: Option<String>,
 }
 
 impl DifitSpawnContext {
@@ -386,8 +403,12 @@ fn spawn_difit_server(ctx: DifitSpawnContext, diff: DiffType, base_branch: Optio
                 let hash = calculate_diff_hash(&diff_content);
                 ctx.registry.set_diff_hash(&ctx.window_label, hash);
 
-                let result =
-                    start_difit_server_with_content(diff_content, &ctx.project_dir, ctx.port);
+                let result = start_difit_server_with_content(
+                    diff_content,
+                    &ctx.project_dir,
+                    ctx.port,
+                    ctx.npx_path.as_deref(),
+                );
                 ctx.handle_server_result(result);
             }
             Err(e) => {
@@ -401,7 +422,12 @@ fn spawn_difit_server(ctx: DifitSpawnContext, diff: DiffType, base_branch: Optio
 
 fn spawn_difit_server_with_content(ctx: DifitSpawnContext, diff_content: Vec<u8>) {
     std::thread::spawn(move || {
-        let result = start_difit_server_with_content(diff_content, &ctx.project_dir, ctx.port);
+        let result = start_difit_server_with_content(
+            diff_content,
+            &ctx.project_dir,
+            ctx.port,
+            ctx.npx_path.as_deref(),
+        );
         ctx.handle_server_result(result);
     });
 }

@@ -10,6 +10,7 @@
 const fs = require("node:fs");
 const path = require("node:path");
 const os = require("node:os");
+const { execSync } = require("node:child_process");
 
 function isoTimestampUtc() {
   return new Date().toISOString();
@@ -36,6 +37,14 @@ function getString(obj, key, fallback = "") {
   if (typeof v === "string") return v;
   if (typeof v === "number" || typeof v === "boolean") return String(v);
   return fallback;
+}
+
+function whichCommand(cmd) {
+  try {
+    return execSync(`which ${cmd}`, { encoding: "utf8", timeout: 5000 }).trim();
+  } catch {
+    return "";
+  }
 }
 
 async function readStdin() {
@@ -79,6 +88,14 @@ async function main() {
 
   const timestamp = isoTimestampUtc();
 
+  // Capture binary paths for session_start and stop events
+  let npxPath = "";
+  let tmuxPath = "";
+  if (eventType === "session_start" || eventType === "stop") {
+    npxPath = whichCommand("npx");
+    tmuxPath = whichCommand("tmux");
+  }
+
   const payload = {
     timestamp,
     event: eventType,
@@ -90,6 +107,8 @@ async function main() {
     notification_type: notificationType,
     tool_name: toolName,
     tmux_pane: tmuxPane,
+    npx_path: npxPath,
+    tmux_path: tmuxPath,
   };
 
   const payloadJson = JSON.stringify(payload);

@@ -287,20 +287,41 @@ pub fn calculate_diff_hash(content: &[u8]) -> u64 {
 }
 
 /// Start a difit server with pre-fetched diff content
+///
+/// `npx_path`: Optional path to npx binary. If None or empty, falls back to "npx".
 pub fn start_difit_server_with_content(
     diff_content: Vec<u8>,
     repo_path: &str,
     port: u16,
+    npx_path: Option<&str>,
 ) -> Result<DifitServerInfo, String> {
-    // Start difit with --no-open flag so it doesn't open browser
-    let mut difit_process = Command::new("npx")
-        .args(["difit", "--no-open", "--port", &port.to_string()])
+    // Determine npx command to use
+    let npx_cmd = npx_path.filter(|p| !p.is_empty()).unwrap_or("npx");
+
+    log::info!(target: "eocc.difit", "Starting difit with npx_cmd={}, port={}", npx_cmd, port);
+
+    // Build command with PATH set to include node binary directory
+    let mut cmd = Command::new(npx_cmd);
+    cmd.args(["difit", "--no-open", "--port", &port.to_string()])
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
-        .current_dir(repo_path)
+        .current_dir(repo_path);
+
+    // If npx_path is provided, add its directory to PATH so `env node` can find node
+    if let Some(path) = npx_path.filter(|p| !p.is_empty()) {
+        if let Some(bin_dir) = std::path::Path::new(path).parent() {
+            let current_path = std::env::var("PATH").unwrap_or_default();
+            let new_path = format!("{}:{}", bin_dir.display(), current_path);
+            cmd.env("PATH", new_path);
+            log::info!(target: "eocc.difit", "Set PATH to include: {}", bin_dir.display());
+        }
+    }
+
+    // Start difit process
+    let mut difit_process = cmd
         .spawn()
-        .map_err(|e| format!("Failed to start difit: {}", e))?;
+        .map_err(|e| format!("Failed to start difit (npx_path={}): {}", npx_cmd, e))?;
 
     // Write git diff to stdin
     {
@@ -325,6 +346,7 @@ pub fn start_difit_server_with_content(
     std::thread::spawn(move || {
         let reader = BufReader::new(stderr);
         for line in reader.lines().take(10).flatten() {
+            log::info!(target: "eocc.difit", "difit stderr: {}", line);
             // Look for "difit server started on http://localhost:XXXX"
             if line.contains("difit server started on") {
                 if let Some(url_start) = line.find("http://") {
@@ -346,6 +368,8 @@ pub fn start_difit_server_with_content(
     // Wait for up to 5 seconds for the server to start
     let actual_port = rx.recv_timeout(Duration::from_secs(5)).unwrap_or(port);
     let url = format!("http://localhost:{}", actual_port);
+
+    log::info!(target: "eocc.difit", "Difit server started at {}", url);
 
     Ok(DifitServerInfo {
         url,

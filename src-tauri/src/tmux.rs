@@ -1,44 +1,30 @@
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use std::process::Command;
-use std::sync::OnceLock;
+use std::sync::Mutex;
 
-static TMUX_PATH: OnceLock<Option<PathBuf>> = OnceLock::new();
+static CACHED_TMUX_PATH: Mutex<Option<String>> = Mutex::new(None);
 
-fn get_tmux_path() -> Option<&'static PathBuf> {
-    TMUX_PATH
-        .get_or_init(|| {
-            let candidates = [
-                "/opt/homebrew/bin/tmux", // Apple Silicon
-                "/usr/local/bin/tmux",    // Intel Mac / Homebrew legacy
-                "/usr/bin/tmux",          // System path
-                "/bin/tmux",              // Unlikely but check anyway
-            ];
+/// Set the cached tmux path from hook events
+pub fn set_cached_tmux_path(path: &str) {
+    if !path.is_empty() {
+        if let Ok(mut cached) = CACHED_TMUX_PATH.lock() {
+            *cached = Some(path.to_string());
+            log::info!(target: "eocc.tmux", "Cached tmux path set to: {}", path);
+        }
+    }
+}
 
-            for path in candidates {
-                let path = PathBuf::from(path);
-                if path.exists() {
-                    log::info!(target: "eocc.tmux", "Found tmux at: {:?}", path);
-                    return Some(path);
-                }
+fn get_tmux_path() -> Option<PathBuf> {
+    if let Ok(cached) = CACHED_TMUX_PATH.lock() {
+        if let Some(ref path_str) = *cached {
+            let path = PathBuf::from(path_str);
+            if path.exists() {
+                return Some(path);
             }
-
-            // Fallback: try to find via PATH (works in dev mode)
-            if let Ok(output) = Command::new("which").arg("tmux").output() {
-                if output.status.success() {
-                    let path_str = String::from_utf8_lossy(&output.stdout);
-                    let path = PathBuf::from(path_str.trim());
-                    if path.exists() {
-                        log::info!(target: "eocc.tmux", "Found tmux via which: {:?}", path);
-                        return Some(path);
-                    }
-                }
-            }
-
-            log::warn!(target: "eocc.tmux", "tmux not found in any known location");
-            None
-        })
-        .as_ref()
+        }
+    }
+    None
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -71,10 +57,10 @@ fn validate_pane_id(pane_id: &str) -> Result<(), String> {
 
 fn run_tmux_command(args: &[&str]) -> Result<String, String> {
     let tmux_path = get_tmux_path().ok_or_else(|| {
-        "tmux not found. Please ensure tmux is installed (e.g., brew install tmux)".to_string()
+        "tmux path not available. Please start a Claude Code session first.".to_string()
     })?;
 
-    let output = Command::new(tmux_path)
+    let output = Command::new(&tmux_path)
         .args(args)
         .output()
         .map_err(|e| format!("Failed to execute tmux: {}", e))?;
