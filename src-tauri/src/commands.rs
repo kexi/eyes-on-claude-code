@@ -225,8 +225,6 @@ pub fn open_diff(
         }
     };
 
-    log::info!(target: "eocc.difit", "open_diff: npx_path={:?}", npx_path);
-
     // Create loading page data URL
     let loading_url = format!(
         "data:text/html;base64,{}",
@@ -385,9 +383,12 @@ impl DifitSpawnContext {
                         let _ = window.navigate(url);
                         let _ = window.set_title(&format!("Diff - {}", self.diff_type_display));
                     }
+                } else {
+                    log::warn!(target: "eocc.difit", "handle_server_result: window not found for label={}", self.window_label);
                 }
             }
             Err(e) => {
+                log::error!(target: "eocc.difit", "handle_server_result: error={}", e);
                 if let Some(window) = self.app_handle.get_webview_window(&self.window_label) {
                     show_error_in_window(&window, &e, &self.diff_type_display);
                 }
@@ -412,6 +413,7 @@ fn spawn_difit_server(ctx: DifitSpawnContext, diff: DiffType, base_branch: Optio
                 ctx.handle_server_result(result);
             }
             Err(e) => {
+                log::error!(target: "eocc.difit", "get_diff_content failed: {}", e);
                 if let Some(window) = ctx.app_handle.get_webview_window(&ctx.window_label) {
                     show_error_in_window(&window, &e, &ctx.diff_type_display);
                 }

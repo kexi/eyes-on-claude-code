@@ -314,7 +314,6 @@ pub fn start_difit_server_with_content(
             let current_path = std::env::var("PATH").unwrap_or_default();
             let new_path = format!("{}:{}", bin_dir.display(), current_path);
             cmd.env("PATH", new_path);
-            log::info!(target: "eocc.difit", "Set PATH to include: {}", bin_dir.display());
         }
     }
 
@@ -346,7 +345,6 @@ pub fn start_difit_server_with_content(
     std::thread::spawn(move || {
         let reader = BufReader::new(stderr);
         for line in reader.lines().take(10).flatten() {
-            log::info!(target: "eocc.difit", "difit stderr: {}", line);
             // Look for "difit server started on http://localhost:XXXX"
             if line.contains("difit server started on") {
                 if let Some(url_start) = line.find("http://") {
@@ -367,7 +365,12 @@ pub fn start_difit_server_with_content(
 
     // Wait for up to 5 seconds for the server to start
     let actual_port = rx.recv_timeout(Duration::from_secs(5)).unwrap_or(port);
-    let url = format!("http://localhost:{}", actual_port);
+    // Add cache buster to prevent WebView from caching old responses
+    let cache_buster = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis())
+        .unwrap_or(0);
+    let url = format!("http://localhost:{}?_cb={}", actual_port, cache_buster);
 
     log::info!(target: "eocc.difit", "Difit server started at {}", url);
 
