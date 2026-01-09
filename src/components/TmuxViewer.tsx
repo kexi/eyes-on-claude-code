@@ -73,6 +73,11 @@ export const TmuxViewer = ({ paneId }: TmuxViewerProps) => {
       return null;
     }
 
+    // Allow browser paste handling for Cmd+V (macOS)
+    if (e.metaKey && e.key.toLowerCase() === 'v') {
+      return null;
+    }
+
     // Handle Ctrl+key combinations
     if (e.ctrlKey && e.key.length === 1) {
       return `C-${e.key.toLowerCase()}`;
@@ -177,6 +182,22 @@ export const TmuxViewer = ({ paneId }: TmuxViewerProps) => {
     [paneId, loadContent]
   );
 
+  const handlePaste = useCallback(
+    async (e: ClipboardEvent) => {
+      const text = e.clipboardData?.getData('text/plain');
+      if (text) {
+        e.preventDefault();
+        try {
+          await tmuxSendKeys(paneId, text);
+          loadContent().catch(console.error);
+        } catch (err) {
+          console.error('Failed to paste text:', err);
+        }
+      }
+    },
+    [paneId, loadContent]
+  );
+
   useEffect(() => {
     isMountedRef.current = true;
     return () => {
@@ -204,6 +225,11 @@ export const TmuxViewer = ({ paneId }: TmuxViewerProps) => {
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [handleKeyDown]);
+
+  useEffect(() => {
+    window.addEventListener('paste', handlePaste);
+    return () => window.removeEventListener('paste', handlePaste);
+  }, [handlePaste]);
 
   // Refocus hidden input when window gains focus (for IME support)
   useEffect(() => {
