@@ -267,7 +267,6 @@ Releases are automated via GitHub Actions. To create a new release:
 | Platform | Architecture | Artifact |
 |----------|--------------|----------|
 | macOS | Apple Silicon (aarch64) | `.dmg`, `.app` |
-| macOS | Intel (x86_64) | `.dmg`, `.app` |
 | Linux | x64 | `.deb`, `.AppImage` |
 | Windows | x64 | `.msi`, `.exe` |
 
@@ -276,12 +275,8 @@ Releases are automated via GitHub Actions. To create a new release:
 For local builds targeting a specific platform:
 
 ```bash
-# macOS (current architecture)
+# macOS (Apple Silicon)
 pnpm tauri build
-
-# Cross-compile (requires appropriate toolchain)
-pnpm tauri build --target aarch64-apple-darwin
-pnpm tauri build --target x86_64-apple-darwin
 ```
 
 #### Icon generation

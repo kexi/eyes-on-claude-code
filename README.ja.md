@@ -269,7 +269,6 @@ pnpm tauri build
 | プラットフォーム | アーキテクチャ | 成果物 |
 |----------|--------------|----------|
 | macOS | Apple Silicon (aarch64) | `.dmg`, `.app` |
-| macOS | Intel (x86_64) | `.dmg`, `.app` |
 | Linux | x64 | `.deb`, `.AppImage` |
 | Windows | x64 | `.msi`, `.exe` |
 
@@ -278,12 +277,8 @@ pnpm tauri build
 特定のプラットフォーム向けにローカルでビルドする場合:
 
 ```bash
-# macOS（現在のアーキテクチャ）
+# macOS (Apple Silicon)
 pnpm tauri build
-
-# クロスコンパイル（適切なツールチェーンが必要）
-pnpm tauri build --target aarch64-apple-darwin
-pnpm tauri build --target x86_64-apple-darwin
 ```
 
 #### アイコン生成
